@@ -1,0 +1,63 @@
+{
+  "name": "shiggybot",
+  "version": "0.1.0",
+  "description": "A lightweight, extensible Discord bot scaffold in TypeScript — easy to deploy, add commands, and extend.",
+  "author": "kmmiio99o",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kmmiio99o/ShiggyBot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kmmiio99o/ShiggyBot/issues"
+  },
+  "homepage": "https://github.com/kmmiio99o/ShiggyBot#readme",
+  "packageManager": "bun@1",
+  "engines": {
+    "node": ">=18",
+    "bun": ">=1"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev:bun": "bun --watch src/index.ts",
+    "install:bun": "bun install",
+    "build": "rimraf dist && bunx tsc -p tsconfig.build.json",
+    "build:bun": "rimraf dist && bunx tsc -p tsconfig.build.json",
+    "start": "node ./dist/index.js",
+    "start:bun": "bun ./dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.{ts,js}\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
+    "clean": "rimraf dist .turbo",
+    "docs": "node ./scripts/generate-readme.js || true"
+  },
+  "dependencies": {
+    "discord.js": "^14.23.2",
+    "@types/node": "^24.8.1",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3",
+    "eslint": "^8.57.1",
+    "@typescript-eslint/parser": "^6.21.0",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "prettier": "^2.8.8",
+    "eslint-config-prettier": "^8.10.2",
+    "eslint-plugin-prettier": "^5.5.4",
+    "rimraf": "^5.0.10"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "typescript",
+    "bot",
+    "scaffold",
+    "cloud"
+  ]
+}
