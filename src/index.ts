@@ -11,13 +11,12 @@
  * Environment variables expected:
  * - DISCORD_TOKEN      (required) — your bot token
  * - CLIENT_ID          (optional, recommended) — your application's client ID (used for logging)
- * - DEV_GUILD_ID       (optional) — if provided, commands will be registered to this guild (fast dev loop)
-
- *
+ * - DEV_GUILD_ID       (optional) — if provided, commands will be registered to this guild (fast dev loop) *
  * Usage:
  * - Install dependencies: `npm install`
  * - Build: `npm run build`
  * - Dev: `npm run dev` (requires ts-node-dev)
+ *
  * - Start: set env vars and run `npm start`
  *
  * Extend:
@@ -41,12 +40,15 @@ import {
   logError,
   attachProcessHandlers,
 } from "./utils/webhookLogger";
+import { autoPreviewCodeLinks } from "./Previews/codePreview";
+import { startDashboard } from "./dashboard";
 
 const {
   DISCORD_TOKEN,
   CLIENT_ID,
   DEV_GUILD_ID, // optional: for quicker command registration during development
   LOG_WEBHOOK_URL,
+  DASHBOARD_PORT,
 } = process.env;
 
 if (!DISCORD_TOKEN) {
@@ -223,6 +225,18 @@ const onClientReady = async () => {
       "Bot is ready. Add more listeners and commands in src/ to extend functionality."
     );
 
+    // Start dashboard after bot is ready
+    try {
+      const { startDashboard } = await import("./dashboard");
+      const dashboardPort = DASHBOARD_PORT
+        ? parseInt(DASHBOARD_PORT, 10)
+        : 14150;
+      // Pass the running Discord client so the dashboard can access guild/member APIs
+      startDashboard(dashboardPort, client);
+    } catch (err) {
+      console.error("Failed to start dashboard:", err);
+    }
+
     // Initialize optional events from the `src/events` barrel (presence, autorole),
     // and initialize prefix-based commands if available.
     // Missing modules or missing exports are handled gracefully.
@@ -322,7 +336,7 @@ try {
 // TEMPORARY: raw messageCreate listener to confirm messages are arriving at the client.
 // This will log non-bot messages (guild/DM) with basic metadata. Keep this temporarily for debugging,
 // then remove it once you've confirmed events are delivered.
-client.on("messageCreate", (message) => {
+client.on("messageCreate", async (message) => {
   try {
     if (message.author?.bot) return;
     // Log a short preview of the message (truncate content for safety)
@@ -337,34 +351,12 @@ client.on("messageCreate", (message) => {
         } ` +
         `content_len=${message.content?.length ?? 0} preview="${preview}"`
     );
+
+    // Automatically preview code links in any message
+    await autoPreviewCodeLinks(message);
   } catch (err) {
     console.error("raw messageCreate logger error:", err);
   }
-});
-
-/**
- * Health endpoint + Login
- *
- * Start a minimal HTTP server exposing a /health endpoint so container platforms
- * (Render, Fly, etc.) can perform health checks. The server is intentionally
- * tiny and independent of the Discord client lifecycle.
- */
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const server = http.createServer((req, res) => {
-  try {
-    if (req.method === "GET" && req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-  } catch {
-    // fail silently; continue to 404
-  }
-  res.writeHead(404);
-  res.end();
-});
-server.listen(PORT, () => {
-  console.log(`Health endpoint listening on port ${PORT}`);
 });
 
 /**
