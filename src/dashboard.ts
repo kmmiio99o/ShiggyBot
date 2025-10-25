@@ -164,12 +164,12 @@ export function startDashboard(port?: number, client?: Client): Server {
     return null;
   }
 
-  function msToTime(ms) {
+  function msToTime(ms: number): string {
     const totalSec = Math.floor(ms / 1000);
     const days = Math.floor(totalSec / 86400);
     const hours = Math.floor((totalSec % 86400) / 3600);
     const minutes = Math.floor((totalSec % 3600) / 60);
-    const parts = [];
+    const parts: string[] = [];
     if (days) parts.push(`${days}d`);
     if (hours) parts.push(`${hours}h`);
     parts.push(`${minutes}m`);
@@ -423,11 +423,9 @@ export function startDashboard(port?: number, client?: Client): Server {
       const botHighestPos = meMember.roles?.highest?.position ?? 0;
       const targetHighestPos = (member as any).roles?.highest?.position ?? 0;
       if (botHighestPos <= targetHighestPos) {
-        return res
-          .status(403)
-          .json({
-            error: "Bot role must be higher than target's highest role",
-          });
+        return res.status(403).json({
+          error: "Bot role must be higher than target's highest role",
+        });
       }
 
       // Try the standard timeout API (discord.js v14)
