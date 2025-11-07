@@ -42,6 +42,7 @@ import {
 } from "./utils/webhookLogger";
 import { autoPreviewCodeLinks } from "./Previews/codePreview";
 import { autoPreviewCommitLinks } from "./Previews/commitPreview";
+import { handleSnote } from "./snotes";
 import { startDashboard } from "./dashboard";
 
 const {
@@ -352,6 +353,13 @@ client.on("messageCreate", async (message) => {
         } ` +
         `content_len=${message.content?.length ?? 0} preview="${preview}"`
     );
+
+    // Snote sticky note command: Snote <topic>
+    if (message.content.toLowerCase().startsWith("snote ")) {
+      const topic = message.content.slice(6).trim().toLowerCase();
+      await handleSnote(message, topic);
+      return;
+    }
 
     // Automatically preview code links in any message
     await autoPreviewCodeLinks(message);
