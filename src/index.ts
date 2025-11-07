@@ -41,6 +41,7 @@ import {
   attachProcessHandlers,
 } from "./utils/webhookLogger";
 import { autoPreviewCodeLinks } from "./Previews/codePreview";
+import { autoPreviewCommitLinks } from "./Previews/commitPreview";
 import { startDashboard } from "./dashboard";
 
 const {
@@ -354,6 +355,8 @@ client.on("messageCreate", async (message) => {
 
     // Automatically preview code links in any message
     await autoPreviewCodeLinks(message);
+    // Automatically preview commit links in any message
+    await autoPreviewCommitLinks(message);
   } catch (err) {
     console.error("raw messageCreate logger error:", err);
   }
