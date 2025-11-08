@@ -357,8 +357,23 @@ client.on("messageCreate", async (message) => {
 
     // Snote sticky note command: Snote <topic>
     const messageContentLower = message.content.toLowerCase();
-    if (messageContentLower.startsWith("snote ")) {
+    if (messageContentLower.startsWith("snote")) {
       const topic = messageContentLower.slice(6).trim();
+
+      if (!topic) {
+        // Display available notes in an embed
+        const availableNotes = Object.keys(notes)
+          .map((note) => `**${note}**`)
+          .join(", ");
+        const embed = new EmbedBuilder()
+          .setTitle("Need a Snote?")
+          .setDescription(`${availableNotes}`)
+          .setColor(0xffeac4);
+
+        await message.channel.send({ embeds: [embed] });
+        return;
+      }
+
       const note = notes[topic];
 
       if (note) {

@@ -1,10 +1,17 @@
+/**
+ * src/snotes.ts:
+ *
+ * This file defines the data structure and hardcoded content for the Snote command.
+ * It exports a `notes` object containing the sticky notes, which are used by the
+ * main command handler in `src/index.ts`.
+ */
+
 // Define the structure for a sticky note
 interface Snote {
   title: string;
   content: string | string[];
 }
 
-// Hardcoded notes object
 export const notes: { [key: string]: Snote } = {
   vc: {
     title: "No one can hear me",
@@ -39,5 +46,4 @@ export const notes: { [key: string]: Snote } = {
     content:
       "ShiggyCord tried to fetch bundle but couldn't. Try using vpn and see if it works. But if Shiggy still load successfully, ignore it.",
   },
-  // Add more notes here as needed
 };

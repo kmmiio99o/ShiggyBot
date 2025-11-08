@@ -30,13 +30,13 @@ export function setupPrefixCommands(client: Client): () => void {
   console.log(
     "prefix loader: attaching messageCreate handler (prefix=",
     PREFIX,
-    ")"
+    ")",
   );
 
   // If already attached, avoid registering a second handler.
   if (_prefixHandlerAttached) {
     console.log(
-      "prefix loader: handler already attached; skipping duplicate registration."
+      "prefix loader: handler already attached; skipping duplicate registration.",
     );
     // Return a no-op cleanup to satisfy the caller contract.
     return () => {};
@@ -52,7 +52,7 @@ export function setupPrefixCommands(client: Client): () => void {
           } ` +
             `in guild ${message.guild?.id ?? "DM"} content_len=${
               message.content?.length ?? 0
-            }`
+            }`,
         );
       } catch {
         // ignore failures in message inspection
@@ -64,7 +64,7 @@ export function setupPrefixCommands(client: Client): () => void {
       }
       if (!message.guild || !message.content) {
         console.log(
-          "prefix: missing guild or content; message content may be unavailable (Message Content intent required)"
+          "prefix: missing guild or content; message content may be unavailable (Message Content intent required)",
         );
         return;
       }
@@ -90,7 +90,7 @@ export function setupPrefixCommands(client: Client): () => void {
       // Helper reply (robust): accept either a string or a message payload object,
       // then try message.reply, channel.send, and finally DM as fallbacks.
       const reply = async (
-        strOrPayload: string | { content?: string; embeds?: any[] }
+        strOrPayload: string | { content?: string; embeds?: any[] },
       ) => {
         const payload =
           typeof strOrPayload === "string"
@@ -138,7 +138,7 @@ export function setupPrefixCommands(client: Client): () => void {
         if (cmd === "timeout") {
           console.log(
             "prefix handler: dispatching timeout command, args:",
-            args
+            args,
           );
           const mod = await import("../commands/moderation/timeout");
           const run = mod.default;
@@ -153,7 +153,7 @@ export function setupPrefixCommands(client: Client): () => void {
         if (cmd === "addrole") {
           console.log(
             "prefix handler: dispatching addrole command, args:",
-            args
+            args,
           );
           const mod = await import("../commands/moderation/addrole");
           const run = mod.default;
@@ -180,7 +180,7 @@ export function setupPrefixCommands(client: Client): () => void {
         if (cmd === "removerole") {
           console.log(
             "prefix handler: dispatching removerole command, args:",
-            args
+            args,
           );
           // standalone removerole module (moved out of addrole)
           const mod: any = await import("../commands/moderation/removerole");
@@ -197,7 +197,7 @@ export function setupPrefixCommands(client: Client): () => void {
           const embed = new EmbedBuilder()
             .setTitle("ShiggyBot")
             .setDescription(
-              "Lightweight Discord bot scaffold — autorole, presence, prefix commands, and more."
+              "Lightweight Discord bot scaffold — autorole, presence, prefix commands, and more.",
             )
             .addFields(
               {
@@ -207,9 +207,9 @@ export function setupPrefixCommands(client: Client): () => void {
               },
               {
                 name: "Commands",
-                value: `${PREFIX}ban, ${PREFIX}timeout, ${PREFIX}addrole, ${PREFIX}removerole, ${PREFIX}about`,
+                value: `${PREFIX}ban, ${PREFIX}timeout, ${PREFIX}addrole, ${PREFIX}removerole, ${PREFIX}about, ${PREFIX}note`,
                 inline: true,
-              }
+              },
             )
             .setTimestamp();
           await (message.channel as any)
@@ -222,13 +222,13 @@ export function setupPrefixCommands(client: Client): () => void {
         console.log(
           `prefix: unknown command '${cmd}' from ${
             message.author?.tag ?? message.author?.id
-          }`
+          }`,
         );
         return;
       } catch (err) {
         console.error(
           "prefix loader: failed to load/execute command module:",
-          err
+          err,
         );
         await reply("An error occurred while executing the command.");
       }
