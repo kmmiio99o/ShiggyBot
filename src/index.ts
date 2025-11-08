@@ -158,10 +158,10 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     if (interaction.customId.startsWith("plugin_install_")) {
       const installUrl = interaction.customId.replace("plugin_install_", "");
       try {
-        await interaction.reply({
-          content: `Here is the install link: ${installUrl} Copy the link and install plugin in the Settings.`,
-          ephemeral: true,
-        });
+        const embed = new EmbedBuilder()
+          .setTitle("Install Link")
+          .setDescription(installUrl);
+        await interaction.reply({ embeds: [embed], ephemeral: true });
       } catch (err) {
         console.error("Failed to send ephemeral reply for install link:", err);
         if (!interaction.replied && !interaction.deferred) {
@@ -178,7 +178,6 @@ client.on("interactionCreate", async (interaction: Interaction) => {
     }
   }
 });
-
 /**
  * Ready event — bot is connected.
  *

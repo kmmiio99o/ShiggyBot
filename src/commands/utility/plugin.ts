@@ -39,52 +39,114 @@ async function fetchPluginData(): Promise<Plugin[]> {
   }
 }
 
+/**
+ * Calculates the Levenshtein distance between two strings.
+ * Used to determine the similarity between a query and a plugin name.
+ * @param a The first string.
+ * @param b The second string.
+ * @returns The Levenshtein distance.
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const an = a.length;
+  const bn = b.length;
+
+  if (an === 0) return bn;
+  if (bn === 0) return an;
+
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= an; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 1; j <= bn; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= an; i++) {
+    for (let j = 1; j <= bn; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1, // deletion
+        matrix[i][j - 1] + 1, // insertion
+        matrix[i - 1][j - 1] + cost, // substitution
+      );
+    }
+  }
+
+  return matrix[an][bn];
+}
+
+/**
+ * Fuzzy matches a text against a query, returning a score from 0 to 1.
+ * Higher score means better match.
+ * @param text The text to search within (e.g., plugin name).
+ * @param query The search query.
+ * @returns A score indicating similarity.
+ */
 function fuzzyMatch(text: string, query: string): number {
   const lowerText = text.toLowerCase();
   const lowerQuery = query.toLowerCase();
 
+  // If there's an exact substring match, it's a very good score
   if (lowerText.includes(lowerQuery)) {
-    return 1; // Exact substring match
+    // Prioritize exact matches or strong partials
+    return 1.0 - (lowerText.length - lowerQuery.length) / lowerText.length;
   }
 
-  let score = 0;
-  let queryIdx = 0;
-  for (let i = 0; i < lowerText.length; i++) {
-    if (lowerText[i] === lowerQuery[queryIdx]) {
-      queryIdx++;
-      score++;
-    }
-  }
+  // Calculate Levenshtein distance
+  const distance = levenshteinDistance(lowerText, lowerQuery);
 
-  return queryIdx === lowerQuery.length ? score / lowerText.length : 0;
+  // Normalize distance to a similarity score (0 to 1)
+  // Max possible distance is the length of the longer string
+  const maxLength = Math.max(lowerText.length, lowerQuery.length);
+  if (maxLength === 0) return 1; // Both empty strings are a perfect match
+
+  // A perfect match (distance 0) should yield score 1.
+  // A completely dissimilar match should yield a score close to 0.
+  // We'll use a threshold to filter out very poor matches later if needed.
+  return 1 - distance / maxLength;
 }
 
 async function sendEmbedReply(
   message: Message,
   embed: EmbedBuilder,
   components: ActionRowBuilder<ButtonBuilder>[] = [],
-): Promise<void> {
+): Promise<Message> {
   try {
-    await message.reply({ embeds: [embed], components });
-  } catch (err) {
-    console.error("Failed to send embed reply:", err);
+    return await message.reply({
+      embeds: [embed],
+      components,
+    });
+  } catch (replyErr) {
+    console.error(
+      "Failed to reply to message, attempting DM/channel send:",
+      replyErr,
+    );
     try {
+      // message.reply() does not support ephemeral. Fallback to DM or channel send.
+      // If message.reply() failed, it's likely a permission issue in the channel,
+      // so we try DMing the author if available.
+
       if (
         message.author &&
         typeof (message.author as any).send === "function"
       ) {
-        await (message.author as any).send({
+        return await (message.author as any).send({
           embeds: [embed as any],
           components: components as any,
         });
       } else {
-        await (message.channel as any).send({
+        return await (message.channel as any).send({
           embeds: [embed as any],
           components: components as any,
         });
       }
-    } catch (dmErr) {
-      console.error("Failed to send DM embed or channel embed:", dmErr);
+    } catch (dmOrChannelErr) {
+      console.error(
+        "Failed to send DM or channel embed as fallback:",
+        dmOrChannelErr,
+      );
+      throw new Error("Failed to send message after multiple attempts.");
     }
   }
 }
@@ -92,6 +154,8 @@ async function sendEmbedReply(
 export async function runPluginSearch(
   message: Message,
   args: string[],
+  page: number = 1,
+  filter: string = "all",
 ): Promise<void> {
   const query = args.join(" ").trim();
 
@@ -102,9 +166,17 @@ export async function runPluginSearch(
         "Please provide a plugin name to search for. For example: `Splug petPet` or `[[petPet]]`.",
       )
       .setColor(COLOR_INFO); // Use INFO color for usage
-    await sendEmbedReply(message, embed);
+    await sendEmbedReply(message, embed); // ephemeral set to true for usage message
     return;
   }
+
+  // Send an initial \"Searching...\" message
+  const loadingEmbed = new EmbedBuilder()
+    .setDescription("Searching for plugins...")
+    .setColor(COLOR_INFO);
+  const loadingMessage = await message.reply({
+    embeds: [loadingEmbed],
+  });
 
   const allPlugins = await fetchPluginData();
 
@@ -113,17 +185,19 @@ export async function runPluginSearch(
       .setTitle("Plugin Search — Error")
       .setDescription("Failed to fetch plugin data. Please try again later.")
       .setColor(COLOR_BROKEN); // Use BROKEN color for errors
-    await sendEmbedReply(message, embed);
+    await sendEmbedReply(message, embed); // ephemeral set to true for usage message
     return;
   }
+
+  const scoreThreshold = 0.4; // Only include matches with a similarity score above this threshold
 
   const searchResults = allPlugins
     .map((plugin) => ({
       plugin,
       score: fuzzyMatch(plugin.name, query),
     }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .filter((item) => item.score >= scoreThreshold) // Filter based on the new similarity score
+    .sort((a, b) => b.score - a.score); // Sort by highest score first
 
   if (searchResults.length > 0) {
     // If only one match, show detailed info and buttons
@@ -180,17 +254,17 @@ export async function runPluginSearch(
       if (bestMatch.sourceUrl) {
         buttonsRow.addComponents(
           new ButtonBuilder()
-            .setLabel("Source Code") // Changed label for conciseness
+            .setLabel("Source Code")
             .setStyle(ButtonStyle.Link)
             .setURL(bestMatch.sourceUrl),
         );
       }
 
-      await sendEmbedReply(
-        message,
-        embed,
-        buttonsRow.components.length > 0 ? [buttonsRow] : [],
-      );
+      await loadingMessage.edit({
+        // Use edit on loadingMessage
+        embeds: [embed],
+        components: buttonsRow.components.length > 0 ? [buttonsRow] : [],
+      });
     } else {
       // Multiple matches, show a list of top results
       const embed = new EmbedBuilder()
@@ -220,13 +294,13 @@ export async function runPluginSearch(
         });
       });
 
-      await sendEmbedReply(message, embed);
+      await loadingMessage.edit({ embeds: [embed] }); // Use edit on loadingMessage
     }
   } else {
     const embed = new EmbedBuilder()
       .setTitle("Plugin Search — No Results")
       .setDescription(`No plugins found matching "${query}".`)
       .setColor(COLOR_INFO); // Use INFO color for no results
-    await sendEmbedReply(message, embed);
+    await loadingMessage.edit({ embeds: [embed] }); // Use edit on loadingMessage
   }
 }
