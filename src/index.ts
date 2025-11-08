@@ -34,6 +34,7 @@ import {
   Routes,
   Interaction,
   EmbedBuilder,
+  ButtonInteraction,
 } from "discord.js";
 import {
   initWebhookLogger,
@@ -45,6 +46,7 @@ import { autoPreviewCodeLinks } from "./Previews/codePreview";
 import { autoPreviewCommitLinks } from "./Previews/commitPreview";
 import { startDashboard } from "./dashboard";
 import { notes } from "./snotes";
+import { runPluginSearch } from "./commands/utility/plugin";
 
 const {
   DISCORD_TOKEN,
@@ -131,26 +133,48 @@ async function registerCommands() {
  * Interaction handler (slash commands).
  */
 client.on("interactionCreate", async (interaction: Interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  try {
-    // No built-in slash commands in this scaffold by default.
-    // Reply with a simple unimplemented message for any chat command.
-    await interaction.reply({
-      content: "Command not implemented.",
-      ephemeral: true,
-    });
-  } catch (err) {
-    console.error("Unhandled interaction error:", err);
-    if (!interaction.replied && !interaction.deferred) {
+  if (interaction.isChatInputCommand()) {
+    try {
+      // No built-in slash commands in this scaffold by default.
+      // Reply with a simple unimplemented message for any chat command.
       await interaction.reply({
-        content: "Internal error while handling command.",
+        content: "Command not implemented.",
         ephemeral: true,
       });
-    } else {
-      await interaction.editReply({
-        content: "Internal error while handling command.",
-      });
+    } catch (err) {
+      console.error("Unhandled chat input command error:", err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: "Internal error while handling command.",
+          ephemeral: true,
+        });
+      } else {
+        await interaction.editReply({
+          content: "Internal error while handling command.",
+        });
+      }
+    }
+  } else if (interaction.isButton()) {
+    if (interaction.customId.startsWith("plugin_install_")) {
+      const installUrl = interaction.customId.replace("plugin_install_", "");
+      try {
+        await interaction.reply({
+          content: `Here is the install link: ${installUrl} Copy the link and install plugin in the Settings.`,
+          ephemeral: true,
+        });
+      } catch (err) {
+        console.error("Failed to send ephemeral reply for install link:", err);
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: "Internal error while handling button click.",
+            ephemeral: true,
+          });
+        } else {
+          await interaction.editReply({
+            content: "Internal error while handling button click.",
+          });
+        }
+      }
     }
   }
 });
@@ -404,6 +428,22 @@ client.on("messageCreate", async (message) => {
         });
       }
       return;
+    }
+
+    // Plugin search command: [[<plugin_name>]] or Splug <plugin_name>
+    let pluginQuery = "";
+    if (messageContentLower.startsWith("splug ")) {
+      pluginQuery = message.content.slice(6).trim();
+    } else {
+      const match = message.content.match(/^\[\[(.*?)\]\]$/);
+      if (match && match[1]) {
+        pluginQuery = match[1].trim();
+      }
+    }
+
+    if (pluginQuery) {
+      await runPluginSearch(message, [pluginQuery]);
+      return; // Stop processing further if plugin command was handled
     }
 
     // Automatically preview code links in any message
