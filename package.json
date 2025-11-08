@@ -23,12 +23,12 @@
     "dist"
   ],
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "node ./scripts/dev.mjs",
+    "build": "node ./scripts/build.mjs",
+    "start": "node ./scripts/start.mjs",
     "dev:bun": "bun --watch src/index.ts",
     "install:bun": "bun install",
-    "build": "rimraf dist && bunx tsc -p tsconfig.build.json",
     "build:bun": "rimraf dist && bunx tsc -p tsconfig.build.json",
-    "start": "node ./dist/index.js",
     "start:bun": "bun ./dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.{ts,js}\" --fix",

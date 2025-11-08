@@ -33,6 +33,7 @@ import {
   REST,
   Routes,
   Interaction,
+  EmbedBuilder,
 } from "discord.js";
 import {
   initWebhookLogger,
@@ -42,8 +43,8 @@ import {
 } from "./utils/webhookLogger";
 import { autoPreviewCodeLinks } from "./Previews/codePreview";
 import { autoPreviewCommitLinks } from "./Previews/commitPreview";
-import { handleSnote } from "./snotes";
 import { startDashboard } from "./dashboard";
+import { notes } from "./snotes";
 
 const {
   DISCORD_TOKEN,
@@ -114,7 +115,7 @@ async function registerCommands() {
     } else {
       if (!CLIENT_ID) {
         console.warn(
-          "CLIENT_ID not provided. Registering global commands using client.application may still work if the app is linked."
+          "CLIENT_ID not provided. Registering global commands using client.application may still work if the app is linked.",
         );
       }
       console.log("Registering global application commands...");
@@ -186,7 +187,7 @@ const onClientReady = async () => {
   // listeners being registered (e.g. prefix handler attached twice).
   if (_initLock) {
     console.log(
-      "Ready handler invoked while initialization is already in progress; skipping duplicate invocation."
+      "Ready handler invoked while initialization is already in progress; skipping duplicate invocation.",
     );
     return;
   }
@@ -198,7 +199,7 @@ const onClientReady = async () => {
     if (_cleanupFns.length > 0) {
       try {
         console.log(
-          `Re-initializing modules: running ${_cleanupFns.length} cleanup function(s).`
+          `Re-initializing modules: running ${_cleanupFns.length} cleanup function(s).`,
         );
         for (const fn of _cleanupFns) {
           try {
@@ -224,7 +225,7 @@ const onClientReady = async () => {
     }
     await registerCommands();
     console.log(
-      "Bot is ready. Add more listeners and commands in src/ to extend functionality."
+      "Bot is ready. Add more listeners and commands in src/ to extend functionality.",
     );
 
     // Start dashboard after bot is ready
@@ -299,7 +300,7 @@ const onClientReady = async () => {
         // It's optional; log at debug level
         console.debug(
           "Prefix commands module not loaded (optional):",
-          (err as any)?.message ?? err
+          (err as any)?.message ?? err,
         );
       }
     } catch (err) {
@@ -313,25 +314,25 @@ const onClientReady = async () => {
 
 // Use `on` for ready events to support multiple invocations (we handle cleanup
 // and re-initialization inside the handler). Choose the correct event name based
-// on the installed discord.js major version to avoid deprecation warnings in v15+.
+// on the installed discord.js major version to avoid deprecation warnings in v15+.\
 try {
   // Read discord.js package.json to determine major version at runtime.
   // If this fails for any reason, prefer the new `clientReady` event to avoid
   // emitting the deprecation warning on modern discord.js installations.
-  // This keeps behavior safe across different environments and bundlers.
+  // This keeps behavior safe across different environments and bundlers.\
   // Note: require is used here because it's a simple, resilient way to read
-  // the installed package version at runtime.
+  // the installed package version at runtime.\
   const djsPkg = require("discord.js/package.json");
   const djsMajor = parseInt(String(djsPkg.version).split(".")[0], 10) || 0;
   if (djsMajor >= 15) {
     client.on("clientReady", onClientReady);
   } else {
-    // For older v14 installs, listen to `ready`.
+    // For older v14 installs, listen to `ready`.\
     client.on("ready", onClientReady as any);
   }
 } catch (err) {
   // If we can't determine the version at runtime (packaging, bundlers, etc.),
-  // prefer the modern event name to avoid the deprecation warning on v15+.
+  // prefer the modern event name to avoid the deprecation warning on v15+.\
   client.on("clientReady", onClientReady);
 }
 
@@ -351,13 +352,42 @@ client.on("messageCreate", async (message) => {
         `guild=${message.guild?.id ?? "DM"} channel=${
           message.channel?.id ?? "unknown"
         } ` +
-        `content_len=${message.content?.length ?? 0} preview="${preview}"`
+        `content_len=${message.content?.length ?? 0} preview="${preview}"`,
     );
 
     // Snote sticky note command: Snote <topic>
-    if (message.content.toLowerCase().startsWith("snote ")) {
-      const topic = message.content.slice(6).trim().toLowerCase();
-      await handleSnote(message, topic);
+    const messageContentLower = message.content.toLowerCase();
+    if (messageContentLower.startsWith("snote ")) {
+      const topic = messageContentLower.slice(6).trim();
+      const note = notes[topic];
+
+      if (note) {
+        const content = Array.isArray(note.content)
+          ? note.content.join("\n")
+          : note.content;
+
+        const embed = new EmbedBuilder()
+          .setTitle(note.title)
+          .setDescription(content)
+          .setColor(0xffeac4);
+
+        if (message.reference?.messageId) {
+          await message.channel.send({
+            embeds: [embed],
+            reply: { messageReference: message.reference.messageId },
+            allowedMentions: { repliedUser: true },
+          });
+        } else {
+          await message.channel.send({
+            embeds: [embed],
+          });
+        }
+      } else {
+        await message.channel.send({
+          content: `No sticky note found for "${topic}".`,
+          allowedMentions: { repliedUser: false },
+        });
+      }
       return;
     }
 
