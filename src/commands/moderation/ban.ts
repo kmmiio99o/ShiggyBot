@@ -20,10 +20,11 @@ import { Message, PermissionsBitField, EmbedBuilder } from "discord.js";
 const EXAMPLES = [
   "Sban @offender Spamming",
   "Sban 123456789012345678 Rule violation",
+  "Reply to user's message with 'sban spamming'",
 ];
 export default async function runBan(
   message: Message,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   const reply = async (txt: string) => {
     try {
@@ -74,7 +75,7 @@ export default async function runBan(
       const embed = new EmbedBuilder()
         .setTitle("I lack permission")
         .setDescription(
-          "I do not have permission to ban members. Please grant me the Ban Members permission."
+          "I do not have permission to ban members. Please grant me the Ban Members permission.",
         )
         .setColor(0xff5555)
         .setTimestamp();
@@ -86,21 +87,50 @@ export default async function runBan(
       return;
     }
 
-    const targetToken = args[0];
-    if (!targetToken) {
-      // Provide usage plus inline examples stored in this command file — send as an embed
+    let targetId: string | undefined;
+    let banReason: string;
+
+    const repliedMessage = message.reference?.messageId
+      ? await message.channel.messages
+          .fetch(message.reference.messageId)
+          .catch(() => null)
+      : null;
+
+    if (
+      repliedMessage &&
+      repliedMessage.author &&
+      repliedMessage.author.id !== message.client.user?.id
+    ) {
+      targetId = repliedMessage.author.id;
+      banReason = args.join(" ") || "No reason provided";
+    } else {
+      const targetToken = args[0];
+      if (targetToken) {
+        const mentionMatch = targetToken.match(/^<@!?(?<id>\d+)>$/);
+        targetId =
+          mentionMatch?.groups?.id ?? targetToken.replace(/[<@!>]/g, "");
+      }
+      banReason = args.slice(1).join(" ") || "No reason provided";
+    }
+
+    if (!targetId || !/^\d+$/.test(targetId)) {
       const embed = new EmbedBuilder()
         .setTitle("Sban — Usage & Examples")
         .setDescription(
-          "Ban a member from the server. Provide a mention or a user ID."
+          "Ban a member. Reply to a user\'s message or provide a mention/user ID.",
         )
         .addFields(
-          { name: "Usage", value: "`Sban <user> [reason...]`", inline: false },
+          {
+            name: "Usage",
+            value:
+              "`Sban <user> [reason...]` OR (as a reply) `sban [reason...]`",
+            inline: false,
+          },
           {
             name: "Examples",
             value: EXAMPLES.map((e) => `\`${e}\``).join("\n"),
             inline: false,
-          }
+          },
         )
         .setColor(0xff5555)
         .setTimestamp();
@@ -108,35 +138,11 @@ export default async function runBan(
       try {
         await (message.channel as any).send({ embeds: [embed] });
       } catch (err) {
-        // If sending an embed fails for any reason, fall back to the plain-text reply
         await reply(
-          `Usage: Sban <user> [reason...]\nExamples:\n - ${EXAMPLES.join(
-            "\n - "
-          )}`
+          `Usage: Sban <user> [reason...]\\nExamples:\\n - ${EXAMPLES.join(
+            "\\n - ",
+          )}`,
         );
-      }
-      return;
-    }
-
-    // Resolve ID from mention or raw ID
-    const mentionMatch = targetToken.match(/^<@!?(?<id>\d+)>$/);
-    const id = mentionMatch?.groups?.id ?? targetToken.replace(/[<@!>]/g, "");
-
-    if (!/^\d+$/.test(id)) {
-      const embed = new EmbedBuilder()
-        .setTitle("Invalid target")
-        .setDescription("Please provide a valid user mention or user ID.")
-        .setColor(0xffcc00)
-        .setTimestamp()
-        .addFields({
-          name: "Example",
-          value: "`Sban @offender` or `Sban 123456789012345678`",
-        });
-      try {
-        await message.reply({ embeds: [embed] });
-      } catch {
-        // fallback
-        await reply("Please provide a valid user mention or ID.");
       }
       return;
     }
@@ -144,7 +150,7 @@ export default async function runBan(
     // Fetch target member
     let targetMember;
     try {
-      targetMember = await message.guild.members.fetch(id);
+      targetMember = await message.guild.members.fetch(targetId);
     } catch {
       targetMember = null;
     }
@@ -209,7 +215,7 @@ export default async function runBan(
       const embed = new EmbedBuilder()
         .setTitle("Cannot ban user")
         .setDescription(
-          "I cannot ban that member — likely due to role hierarchy or missing permissions."
+          "I cannot ban that member — likely due to role hierarchy or missing permissions.",
         )
         .setColor(0xff5555)
         .setTimestamp()
@@ -222,17 +228,15 @@ export default async function runBan(
         await message.reply({ embeds: [embed] });
       } catch {
         await reply(
-          "I cannot ban that member — likely due to role hierarchy or permissions."
+          "I cannot ban that member — likely due to role hierarchy or permissions.",
         );
       }
       return;
     }
 
-    const reason = args.slice(1).join(" ") || "No reason provided";
-
     // Attempt to ban
     try {
-      await targetMember.ban({ reason });
+      await targetMember.ban({ reason: banReason });
       const embed = new EmbedBuilder()
         .setTitle("Member banned")
         .setDescription(`${targetMember.user.tag} was banned.`)
@@ -242,14 +246,14 @@ export default async function runBan(
             value: `${authorMember?.user.tag ?? "Unknown"}`,
             inline: true,
           },
-          { name: "Reason", value: reason, inline: true }
+          { name: "Reason", value: banReason, inline: true },
         )
         .setColor(0xff3333)
         .setTimestamp();
       try {
         await message.reply({ embeds: [embed] });
       } catch {
-        await reply(`Banned ${targetMember.user.tag}. Reason: ${reason}`);
+        await reply(`Banned ${targetMember.user.tag}. Reason: ${banReason}`);
       }
     } catch (err: any) {
       console.error("runBan: failed to ban member:", err);
@@ -266,7 +270,7 @@ export default async function runBan(
         await message.reply({ embeds: [embed] });
       } catch {
         await reply(
-          `Failed to ban the member: ${(err as any)?.message ?? String(err)}`
+          `Failed to ban the member: ${(err as any)?.message ?? String(err)}`,
         );
       }
     }
@@ -275,7 +279,7 @@ export default async function runBan(
     const embed = new EmbedBuilder()
       .setTitle("Error")
       .setDescription(
-        "An unexpected error occurred while processing the ban command."
+        "An unexpected error occurred while processing the ban command.",
       )
       .setColor(0xff5555)
       .setTimestamp();
