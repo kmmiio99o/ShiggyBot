@@ -12,7 +12,7 @@
     "url": "https://github.com/kmmiio99o/ShiggyBot/issues"
   },
   "homepage": "https://github.com/kmmiio99o/ShiggyBot#readme",
-  "packageManager": "bun@1",
+  "packageManager": "bun@1.3.0",
   "engines": {
     "node": ">=18",
     "bun": ">=1"
@@ -24,11 +24,11 @@
   ],
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
-    "build": "node ./scripts/build.mjs",
+    "build": "rimraf dist && bun build src/index.ts --outfile dist/index.js --minify --bundle --target bun",
     "start": "node ./scripts/start.mjs",
     "dev:bun": "bun --watch src/index.ts",
     "install:bun": "bun install",
-    "build:bun": "rimraf dist && bunx tsc -p tsconfig.build.json",
+    "build:bun": "rimraf dist && bun build src/index.ts --outfile dist/index.js --minify --bundle --target bun",
     "start:bun": "bun ./dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.{ts,js}\" --fix",

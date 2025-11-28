@@ -155,8 +155,11 @@ client.on("interactionCreate", async (interaction: Interaction) => {
       }
     }
   } else if (interaction.isButton()) {
-    if (interaction.customId.startsWith("plugin_install_")) {
-      const installUrl = interaction.customId.replace("plugin_install_", "");
+    if (interaction.customId.startsWith("plugin_install_ephemeral_")) {
+      const installUrl = interaction.customId.replace(
+        "plugin_install_ephemeral_",
+        "",
+      );
       try {
         const embed = new EmbedBuilder()
           .setTitle("Install Link")

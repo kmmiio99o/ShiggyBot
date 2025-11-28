@@ -30,7 +30,7 @@ async function sendEmbedReply(
     description?: string;
     color?: number;
     fields?: { name: string; value: string; inline?: boolean }[];
-  }
+  },
 ) {
   const embed = new EmbedBuilder()
     .setTitle(opts.title ?? "ShiggyBot")
@@ -57,7 +57,7 @@ async function sendEmbedReply(
     } catch (err2) {
       console.error(
         "removerole: failed to deliver embed reply:",
-        (err2 as any)?.message ?? String(err2)
+        (err2 as any)?.message ?? String(err2),
       );
     }
   }
@@ -74,7 +74,7 @@ function resolveRoleIdFromToken(token: string | undefined): string | null {
 
 async function findRole(
   message: Message,
-  token: string | undefined
+  token: string | undefined,
 ): Promise<Role | null> {
   if (!message.guild || !token) return null;
 
@@ -90,12 +90,12 @@ async function findRole(
 
   const name = token.trim().toLowerCase();
   const exact = message.guild.roles.cache.find(
-    (r) => r.name.toLowerCase() === name
+    (r) => r.name.toLowerCase() === name,
   );
   if (exact) return exact;
 
   const partial = message.guild.roles.cache.find((r) =>
-    r.name.toLowerCase().includes(name)
+    r.name.toLowerCase().includes(name),
   );
   if (partial) return partial;
 
@@ -113,7 +113,7 @@ function resolveMemberIdFromToken(token: string | undefined): string | null {
 
 async function findMemberByToken(
   message: Message,
-  token: string | undefined
+  token: string | undefined,
 ): Promise<GuildMember | null> {
   if (!message.guild || !token) return null;
   const id = resolveMemberIdFromToken(token);
@@ -137,7 +137,7 @@ async function findMemberByToken(
 
 export default async function runRemoveRole(
   message: Message,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   try {
     if (!message.guild) {
@@ -170,37 +170,44 @@ export default async function runRemoveRole(
       return;
     }
 
-    const targetToken = args[0];
-    const roleToken = args[1];
+    let member = null;
+    let roleToken = "";
 
-    if (!targetToken || !roleToken) {
+    if (message.reference && message.reference.messageId) {
+      try {
+        const repliedMessage = await message.channel.messages.fetch(
+          message.reference.messageId,
+        );
+        if (repliedMessage && repliedMessage.member) {
+          member = repliedMessage.member;
+          roleToken = args.join(" ");
+        }
+      } catch (err) {
+        console.warn("Could not fetch replied message:", err);
+      }
+    }
+
+    if (!member) {
+      const targetToken = args[0];
+      roleToken = args.slice(1).join(" ");
+      if (targetToken) {
+        member = await findMemberByToken(message, targetToken);
+      }
+    }
+
+    if (!member || !roleToken) {
       await sendEmbedReply(message, {
         title: "Sremoverole — Usage & Examples",
         description:
-          "Remove a role from a member. Provide a mention, ID, or name for the role.",
+          "Remove a role from a member. Provide a mention, ID, or name for the role.\nUsage: `Sremoverole <user> <role>`.\nYou can also reply to a user and use `Sremoverole <role name>`.",
         color: 0xffcc00,
         fields: [
-          {
-            name: "Usage",
-            value: "`Sremoverole <user> <role>`",
-            inline: false,
-          },
           {
             name: "Examples",
             value: EXAMPLES.map((e) => `\`${e}\``).join("\n"),
             inline: false,
           },
         ],
-      });
-      return;
-    }
-
-    const member = await findMemberByToken(message, targetToken);
-    if (!member) {
-      await sendEmbedReply(message, {
-        title: "Member not found",
-        description: "Could not find the specified user in this server.",
-        color: 0xffcc00,
       });
       return;
     }

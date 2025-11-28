@@ -248,7 +248,7 @@ export async function runPluginSearch(
           new ButtonBuilder()
             .setLabel("Copy Install Link")
             .setStyle(ButtonStyle.Primary)
-            .setCustomId(`plugin_install_${bestMatch.installUrl}`),
+            .setCustomId(`plugin_install_ephemeral_${bestMatch.installUrl}`),
         );
       }
       if (bestMatch.sourceUrl) {
@@ -268,10 +268,11 @@ export async function runPluginSearch(
     } else {
       // Multiple matches, show a list of top results
       const embed = new EmbedBuilder()
-        .setTitle(`Plugin Search Results for "${query}"`)
+        .setTitle(`Plugin Search Results for \"${query}\"`)
         .setDescription("Here are the top matching plugins:")
         .setColor(COLOR_INFO);
 
+      const components: ActionRowBuilder<ButtonBuilder>[] = [];
       const maxResults = 5; // Display up to 5 results
       searchResults.slice(0, maxResults).forEach((item, index) => {
         const plugin = item.plugin;
@@ -289,12 +290,41 @@ export async function runPluginSearch(
         }
         embed.addFields({
           name: `${index + 1}. ${statusEmoji} ${plugin.name}`,
-          value: `*${plugin.description.length > 100 ? plugin.description.substring(0, 97) + "..." : plugin.description}*`,
+          value: `*${
+            plugin.description.length > 100
+              ? plugin.description.substring(0, 97) + "..."
+              : plugin.description
+          }*`,
           inline: false,
         });
+
+        const buttonsRow = new ActionRowBuilder<ButtonBuilder>();
+        if (plugin.installUrl) {
+          buttonsRow.addComponents(
+            new ButtonBuilder()
+              .setLabel(`Copy ${plugin.name}`)
+              .setStyle(ButtonStyle.Primary)
+              .setCustomId(`plugin_install_ephemeral_${plugin.installUrl}`),
+          );
+        }
+        if (plugin.sourceUrl) {
+          buttonsRow.addComponents(
+            new ButtonBuilder()
+              .setLabel(`Source ${plugin.name}`)
+              .setStyle(ButtonStyle.Link)
+              .setURL(plugin.sourceUrl),
+          );
+        }
+
+        if (buttonsRow.components.length > 0) {
+          components.push(buttonsRow);
+        }
       });
 
-      await loadingMessage.edit({ embeds: [embed] }); // Use edit on loadingMessage
+      await loadingMessage.edit({
+        embeds: [embed],
+        components: components.length > 0 ? components : [],
+      });
     }
   } else {
     const embed = new EmbedBuilder()

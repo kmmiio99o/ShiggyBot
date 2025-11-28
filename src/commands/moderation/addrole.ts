@@ -54,7 +54,7 @@ async function safeReply(message: Message, content: string) {
       // If sending the embed fails, log the error and do not fall back to plain text.
       console.error(
         "safeReply: failed to deliver embed reply:",
-        (err2 as any)?.message ?? String(err2)
+        (err2 as any)?.message ?? String(err2),
       );
     }
   }
@@ -71,7 +71,7 @@ function resolveRoleIdFromToken(token: string | undefined): string | null {
 
 async function findRole(
   message: Message,
-  token: string | undefined
+  token: string | undefined,
 ): Promise<Role | null> {
   if (!message.guild || !token) return null;
 
@@ -89,13 +89,13 @@ async function findRole(
   // Try by exact name (case-insensitive)
   const name = token.trim().toLowerCase();
   const found = message.guild.roles.cache.find(
-    (r) => r.name.toLowerCase() === name
+    (r) => r.name.toLowerCase() === name,
   );
   if (found) return found;
 
   // Try partial name match (contains)
   const partial = message.guild.roles.cache.find((r) =>
-    r.name.toLowerCase().includes(name)
+    r.name.toLowerCase().includes(name),
   );
   if (partial) return partial;
 
@@ -138,7 +138,7 @@ async function findMemberByToken(message: Message, token: string | undefined) {
  */
 export default async function runAddRole(
   message: Message,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   if (!message.guild) {
     await safeReply(message, "This command can only be used inside a server.");
@@ -158,22 +158,35 @@ export default async function runAddRole(
     return;
   }
 
-  const targetToken = args[0];
-  const roleToken = args[1];
+  let member = null;
+  let roleToken = "";
 
-  if (!targetToken || !roleToken) {
-    await safeReply(
-      message,
-      "Usage: Saddrole <user> <role>. Role can be mention, ID, or name."
-    );
-    return;
+  if (message.reference && message.reference.messageId) {
+    try {
+      const repliedMessage = await message.channel.messages.fetch(
+        message.reference.messageId,
+      );
+      if (repliedMessage && repliedMessage.member) {
+        member = repliedMessage.member;
+        roleToken = args.join(" ");
+      }
+    } catch (err) {
+      console.warn("Could not fetch replied message:", err);
+    }
   }
 
-  const member = await findMemberByToken(message, targetToken);
   if (!member) {
+    const targetToken = args[0];
+    roleToken = args.slice(1).join(" ");
+    if (targetToken) {
+      member = await findMemberByToken(message, targetToken);
+    }
+  }
+
+  if (!member || !roleToken) {
     await safeReply(
       message,
-      "Could not find the specified user in this server."
+      "Usage: `Saddrole <user> <role>`.\\nYou can also reply to a user and use `Saddrole <role name>`.",
     );
     return;
   }
@@ -182,7 +195,7 @@ export default async function runAddRole(
   if (!role) {
     await safeReply(
       message,
-      "Could not find the specified role. Provide a role mention, ID, or exact name."
+      "Could not find the specified role. Provide a role mention, ID, or exact name.",
     );
     return;
   }
@@ -198,7 +211,7 @@ export default async function runAddRole(
   if (botHighest && botHighest.position <= role.position) {
     await safeReply(
       message,
-      "I cannot assign that role because my highest role is not higher than the target role. Adjust role hierarchy."
+      "I cannot assign that role because my highest role is not higher than the target role. Adjust role hierarchy.",
     );
     return;
   }
@@ -212,7 +225,7 @@ export default async function runAddRole(
   ) {
     await safeReply(
       message,
-      "You cannot assign that role because it is equal or higher than your highest role."
+      "You cannot assign that role because it is equal or higher than your highest role.",
     );
     return;
   }
@@ -221,13 +234,13 @@ export default async function runAddRole(
     await member.roles.add(role);
     await safeReply(
       message,
-      `Added role **${role.name}** to **${member.user.tag}**.`
+      `Added role **${role.name}** to **${member.user.tag}**.`,
     );
   } catch (err: any) {
     console.error("runAddRole error:", err);
     await safeReply(
       message,
-      `Failed to add role: ${err?.message ?? String(err)}`
+      `Failed to add role: ${err?.message ?? String(err)}`,
     );
   }
 }
