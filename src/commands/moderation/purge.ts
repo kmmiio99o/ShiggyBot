@@ -21,7 +21,7 @@ const EXAMPLES = [
 async function sendEmbedToChannelOrDM(
   channel: TextChannel | any,
   author: User | null | undefined,
-  embed: EmbedBuilder
+  embed: EmbedBuilder,
 ) {
   try {
     if (channel && typeof (channel as any).send === "function") {
@@ -46,7 +46,7 @@ async function sendEmbedToChannelOrDM(
     // final fallback: log for server-side visibility
     console.error(
       "sendEmbedToChannelOrDM: failed to deliver embed:",
-      (err as any)?.message ?? err
+      (err as any)?.message ?? err,
     );
   }
 }
@@ -92,7 +92,7 @@ async function findMemberByToken(message: Message, token?: string) {
 
 export default async function runPurge(
   message: Message,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   try {
     // must be in a guild
@@ -149,7 +149,7 @@ export default async function runPurge(
       const embed = new EmbedBuilder()
         .setTitle("Spurge — Usage & Examples")
         .setDescription(
-          "Delete recent messages in this channel. Provide a count (1-100)."
+          "Delete recent messages in this channel. Provide a count (1-100).",
         )
         .addFields(
           { name: "Usage", value: "`Spurge <count> [user]`", inline: false },
@@ -157,7 +157,7 @@ export default async function runPurge(
             name: "Examples",
             value: EXAMPLES.map((e) => `\`${e}\``).join("\n"),
             inline: false,
-          }
+          },
         )
         .setColor(0xffcc00)
         .setTimestamp();
@@ -192,7 +192,7 @@ export default async function runPurge(
           const embed = new EmbedBuilder()
             .setTitle("Invalid user")
             .setDescription(
-              "Could not resolve the specified user. Provide a mention, ID, or exact username/display name."
+              "Could not resolve the specified user. Provide a mention, ID, or exact username/display name.",
             )
             .setColor(0xffcc00)
             .setTimestamp();
@@ -240,7 +240,7 @@ export default async function runPurge(
     } catch (err: any) {
       console.error(
         "runPurge: failed while fetching pages:",
-        (err as any)?.message ?? err
+        (err as any)?.message ?? err,
       );
       const embed = new EmbedBuilder()
         .setTitle("Fetch failed")
@@ -262,8 +262,8 @@ export default async function runPurge(
           targetMemberId
             ? "No recent messages from that user found to delete."
             : fetchedAny
-            ? "No recent messages found to delete."
-            : "No messages found."
+              ? "No recent messages found to delete."
+              : "No messages found.",
         )
         .setColor(0xffcc00)
         .setTimestamp();
@@ -290,7 +290,7 @@ export default async function runPurge(
         .setDescription(
           `Deleted **${totalDeleted}** message(s)${
             targetMemberId ? ` from <@${targetMemberId}>` : ""
-          } in this channel.`
+          } in this channel.`,
         )
         .addFields(
           {
@@ -298,7 +298,7 @@ export default async function runPurge(
             value: `${message.author.tag}`,
             inline: true,
           },
-          { name: "Requested count", value: `${targetCount}`, inline: true }
+          { name: "Requested count", value: `${targetCount}`, inline: true },
         )
         .setColor(0x33cc33)
         .setTimestamp();
@@ -307,7 +307,7 @@ export default async function runPurge(
     } catch (err: any) {
       console.error(
         "runPurge: bulkDelete failed during deletion:",
-        (err as any)?.message ?? err
+        (err as any)?.message ?? err,
       );
       // Fall back to deleting individually
       let deleted = 0;
@@ -322,7 +322,7 @@ export default async function runPurge(
       const embed = new EmbedBuilder()
         .setTitle("Purge partial")
         .setDescription(
-          `Deleted ${deleted} message(s) (fallback individual deletes).`
+          `Deleted ${deleted} message(s) (fallback individual deletes).`,
         )
         .setColor(0xffcc00)
         .setTimestamp();
@@ -334,7 +334,7 @@ export default async function runPurge(
     const embed = new EmbedBuilder()
       .setTitle("Error")
       .setDescription(
-        "An unexpected error occurred while processing the purge command."
+        "An unexpected error occurred while processing the purge command.",
       )
       .addFields({ name: "Error", value: (err as any)?.message ?? String(err) })
       .setColor(0xff5555)

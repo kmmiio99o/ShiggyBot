@@ -6,8 +6,10 @@ import {
   ButtonStyle,
 } from "discord.js";
 import { default as fetch } from "node-fetch";
+import { createHash } from "crypto";
 
-interface Plugin {
+// EXPORTED interface
+export interface Plugin {
   name: string;
   description: string;
   authors: string[];
@@ -17,14 +19,53 @@ interface Plugin {
   warningMessage: string;
 }
 
-const PLUGIN_LIST_URL =
+// EXPORTED URL
+export const PLUGIN_LIST_URL =
   "https://raw.githubusercontent.com/Purple-EyeZ/Plugins-List/refs/heads/main/src/plugins-data.json";
 
-// Define colors for embed status
-const COLOR_WORKING = 0x00ff00; // Green
-const COLOR_WARNING = 0xffff00; // Yellow
-const COLOR_BROKEN = 0xff0000; // Red
-const COLOR_INFO = 0x0099ff; // Blue for general info/usage/no results
+// Status colors
+const STATUS_COLORS = {
+  working: 0x00ff00,
+  warning: 0xffff00,
+  broken: 0xff0000,
+  default: 0xffcc00,
+} as const;
+
+// Status emojis
+const STATUS_EMOJIS = {
+  working: "🟢",
+  warning: "🟡",
+  broken: "🔴",
+  default: "⚪",
+} as const;
+
+async function safeReply(message: Message, content: string) {
+  const embed = new EmbedBuilder()
+    .setTitle("ShiggyBot")
+    .setDescription(content)
+    .setColor(STATUS_COLORS.default)
+    .setTimestamp();
+
+  try {
+    await message.reply({ embeds: [embed] });
+  } catch (err) {
+    try {
+      if (
+        message.author &&
+        typeof (message.author as any).send === "function"
+      ) {
+        await (message.author as any).send({ embeds: [embed as any] });
+      } else {
+        await (message.channel as any).send({ embeds: [embed as any] });
+      }
+    } catch (err2) {
+      console.error(
+        "safeReply: failed to deliver embed reply:",
+        (err2 as any)?.message ?? String(err2),
+      );
+    }
+  }
+}
 
 async function fetchPluginData(): Promise<Plugin[]> {
   try {
@@ -39,13 +80,56 @@ async function fetchPluginData(): Promise<Plugin[]> {
   }
 }
 
-/**
- * Calculates the Levenshtein distance between two strings.
- * Used to determine the similarity between a query and a plugin name.
- * @param a The first string.
- * @param b The second string.
- * @returns The Levenshtein distance.
- */
+function calculateSimilarity(text: string, query: string): number {
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+
+  // Exact match (case-insensitive) - highest priority
+  if (lowerText === lowerQuery) return 10.0;
+
+  // Exact match with spaces removed (e.g., "anti ed" matches "antied")
+  const textNoSpaces = lowerText.replace(/\s+/g, "");
+  const queryNoSpaces = lowerQuery.replace(/\s+/g, "");
+  if (textNoSpaces === queryNoSpaces) return 9.5;
+
+  // Starts with query - very high priority
+  if (lowerText.startsWith(lowerQuery)) return 9.0;
+
+  // Query is at word boundary (e.g., "pet" matches "petPet" start)
+  // --- FIX: Correctly escape regex characters and remove recursive code ---
+  const escapedQuery = lowerQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wordBoundaryMatch = lowerText.match(
+    new RegExp(`\\b${escapedQuery}`, "i"),
+  );
+
+  if (wordBoundaryMatch) return 8.5;
+  // --- END FIX ---
+
+  // Contains query as substring
+  if (lowerText.includes(lowerQuery)) {
+    // Bonus for being closer to the start
+    const position = lowerText.indexOf(lowerQuery);
+    const positionBonus = 1 - (position / lowerText.length) * 0.3;
+    // Bonus for length similarity
+    const lengthRatio = lowerQuery.length / lowerText.length;
+    return 7.0 + positionBonus + lengthRatio;
+  }
+
+  // Levenshtein distance for fuzzy matching - only for close matches
+  const distance = levenshteinDistance(lowerText, lowerQuery);
+  const maxLength = Math.max(lowerText.length, lowerQuery.length);
+
+  if (maxLength === 0) return 10.0;
+
+  // Only accept if the edit distance is small relative to query length
+  const similarity = 1 - distance / maxLength;
+
+  // Require higher similarity for fuzzy matches
+  if (similarity < 0.6) return 0; // Reject poor matches
+
+  return similarity * 5.0; // Scale down fuzzy matches (max 5.0)
+}
+
 function levenshteinDistance(a: string, b: string): number {
   const an = a.length;
   const bn = b.length;
@@ -53,22 +137,20 @@ function levenshteinDistance(a: string, b: string): number {
   if (an === 0) return bn;
   if (bn === 0) return an;
 
-  const matrix: number[][] = [];
+  const matrix: number[][] = Array(an + 1)
+    .fill(null)
+    .map(() => Array(bn + 1).fill(0));
 
-  for (let i = 0; i <= an; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 1; j <= bn; j++) {
-    matrix[0][j] = j;
-  }
+  for (let i = 0; i <= an; i++) matrix[i][0] = i;
+  for (let j = 0; j <= bn; j++) matrix[0][j] = j;
 
   for (let i = 1; i <= an; i++) {
     for (let j = 1; j <= bn; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1, // deletion
-        matrix[i][j - 1] + 1, // insertion
-        matrix[i - 1][j - 1] + cost, // substitution
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost,
       );
     }
   }
@@ -76,261 +158,244 @@ function levenshteinDistance(a: string, b: string): number {
   return matrix[an][bn];
 }
 
-/**
- * Fuzzy matches a text against a query, returning a score from 0 to 1.
- * Higher score means better match.
- * @param text The text to search within (e.g., plugin name).
- * @param query The search query.
- * @returns A score indicating similarity.
- */
-function fuzzyMatch(text: string, query: string): number {
-  const lowerText = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-
-  // If there's an exact substring match, it's a very good score
-  if (lowerText.includes(lowerQuery)) {
-    // Prioritize exact matches or strong partials
-    return 1.0 - (lowerText.length - lowerQuery.length) / lowerText.length;
-  }
-
-  // Calculate Levenshtein distance
-  const distance = levenshteinDistance(lowerText, lowerQuery);
-
-  // Normalize distance to a similarity score (0 to 1)
-  // Max possible distance is the length of the longer string
-  const maxLength = Math.max(lowerText.length, lowerQuery.length);
-  if (maxLength === 0) return 1; // Both empty strings are a perfect match
-
-  // A perfect match (distance 0) should yield score 1.
-  // A completely dissimilar match should yield a score close to 0.
-  // We'll use a threshold to filter out very poor matches later if needed.
-  return 1 - distance / maxLength;
+function getStatusColor(status: string): number {
+  const normalized = status.toLowerCase();
+  return (
+    STATUS_COLORS[normalized as keyof typeof STATUS_COLORS] ??
+    STATUS_COLORS.default
+  );
 }
 
-async function sendEmbedReply(
-  message: Message,
-  embed: EmbedBuilder,
-  components: ActionRowBuilder<ButtonBuilder>[] = [],
-): Promise<Message> {
-  try {
-    return await message.reply({
-      embeds: [embed],
-      components,
-    });
-  } catch (replyErr) {
-    console.error(
-      "Failed to reply to message, attempting DM/channel send:",
-      replyErr,
-    );
-    try {
-      // message.reply() does not support ephemeral. Fallback to DM or channel send.
-      // If message.reply() failed, it's likely a permission issue in the channel,
-      // so we try DMing the author if available.
+function getStatusEmoji(status: string): string {
+  const normalized = status.toLowerCase();
+  return (
+    STATUS_EMOJIS[normalized as keyof typeof STATUS_EMOJIS] ??
+    STATUS_EMOJIS.default
+  );
+}
 
-      if (
-        message.author &&
-        typeof (message.author as any).send === "function"
-      ) {
-        return await (message.author as any).send({
-          embeds: [embed as any],
-          components: components as any,
-        });
-      } else {
-        return await (message.channel as any).send({
-          embeds: [embed as any],
-          components: components as any,
-        });
-      }
-    } catch (dmOrChannelErr) {
-      console.error(
-        "Failed to send DM or channel embed as fallback:",
-        dmOrChannelErr,
-      );
-      throw new Error("Failed to send message after multiple attempts.");
+function generatePluginHash(pluginName: string): string {
+  // Create a short hash from the plugin name (max 50 chars to stay under 100 limit)
+  return createHash("md5").update(pluginName).digest("hex").substring(0, 16);
+}
+
+function createPluginButtons(
+  plugin: Plugin,
+  shortLabel: boolean = false,
+): ActionRowBuilder<ButtonBuilder> | null {
+  const row = new ActionRowBuilder<ButtonBuilder>();
+
+  if (plugin.installUrl) {
+    const pluginHash = generatePluginHash(plugin.name);
+
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel(
+          shortLabel ? plugin.name.substring(0, 80) : "Copy Install Link",
+        )
+        .setStyle(ButtonStyle.Primary)
+        .setCustomId(`plg_${pluginHash}`),
+    );
+  }
+
+  if (plugin.sourceUrl) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setLabel("Source Code")
+        .setStyle(ButtonStyle.Link)
+        .setURL(plugin.sourceUrl),
+    );
+  }
+
+  return row.components.length > 0 ? row : null;
+}
+
+async function showSinglePlugin(
+  message: Message,
+  plugin: Plugin,
+  loadingMessage: Message,
+) {
+  const embed = new EmbedBuilder()
+    .setTitle(`Plugin: ${plugin.name}`)
+    .setDescription(
+      plugin.description.length > 200
+        ? plugin.description.substring(0, 197) + "..."
+        : plugin.description,
+    )
+    .addFields(
+      {
+        name: "Authors",
+        value: plugin.authors.join(", ") || "N/A",
+        inline: true,
+      },
+      {
+        name: "Status",
+        value: `${getStatusEmoji(plugin.status)} ${plugin.status}`,
+        inline: true,
+      },
+    )
+    .setColor(getStatusColor(plugin.status))
+    .setTimestamp();
+
+  if (plugin.warningMessage) {
+    embed.addFields({
+      name: "⚠️ Warning",
+      value: plugin.warningMessage,
+      inline: false,
+    });
+  }
+
+  const buttonRow = createPluginButtons(plugin);
+
+  try {
+    await loadingMessage.edit({
+      embeds: [embed],
+      components: buttonRow ? [buttonRow] : [],
+    });
+  } catch (err) {
+    console.error("Failed to edit message with plugin info:", err);
+  }
+}
+
+async function showMultiplePlugins(
+  message: Message,
+  query: string,
+  results: Array<{ plugin: Plugin; score: number }>,
+  loadingMessage: Message,
+) {
+  const embed = new EmbedBuilder()
+    .setTitle("Plugin Search Results")
+    .setDescription(
+      `Found ${results.length} plugin${results.length === 1 ? "" : "s"} matching **${query}**`,
+    )
+    .setColor(STATUS_COLORS.default)
+    .setTimestamp();
+
+  const components: ActionRowBuilder<ButtonBuilder>[] = [];
+  const maxResults = 5;
+
+  results.slice(0, maxResults).forEach((item, index) => {
+    const plugin = item.plugin;
+    const emoji = getStatusEmoji(plugin.status);
+    const truncatedDesc =
+      plugin.description.length > 100
+        ? plugin.description.substring(0, 97) + "..."
+        : plugin.description;
+
+    embed.addFields({
+      name: `${index + 1}. ${emoji} ${plugin.name}`,
+      value: `*${truncatedDesc}*\n**Authors:** ${plugin.authors.join(", ") || "N/A"}`,
+      inline: false,
+    });
+
+    const buttonRow = createPluginButtons(plugin, true);
+    if (buttonRow) {
+      components.push(buttonRow);
     }
+  });
+
+  if (results.length > maxResults) {
+    embed.setFooter({
+      text: `Showing top ${maxResults} of ${results.length} results. Refine your search for better matches.`,
+    });
+  }
+
+  try {
+    await loadingMessage.edit({
+      embeds: [embed],
+      components: components.length > 0 ? components : [],
+    });
+  } catch (err) {
+    console.error("Failed to edit message with search results:", err);
   }
 }
 
 export async function runPluginSearch(
   message: Message,
   args: string[],
-  page: number = 1,
-  filter: string = "all",
 ): Promise<void> {
   const query = args.join(" ").trim();
 
   if (!query) {
-    const embed = new EmbedBuilder()
-      .setTitle("Plugin Search — Usage")
-      .setDescription(
-        "Please provide a plugin name to search for. For example: `Splug petPet` or `[[petPet]]`.",
-      )
-      .setColor(COLOR_INFO); // Use INFO color for usage
-    await sendEmbedReply(message, embed); // ephemeral set to true for usage message
+    await safeReply(
+      message,
+      "Please provide a plugin name to search for.\n**Usage:** `Splug <plugin name>`\n**Example:** `Splug petPet`",
+    );
     return;
   }
 
-  // Send an initial \"Searching...\" message
+  // Show loading message
   const loadingEmbed = new EmbedBuilder()
-    .setDescription("Searching for plugins...")
-    .setColor(COLOR_INFO);
-  const loadingMessage = await message.reply({
-    embeds: [loadingEmbed],
-  });
+    .setTitle("ShiggyBot")
+    .setDescription("🔍 Searching for plugins...")
+    .setColor(STATUS_COLORS.default)
+    .setTimestamp();
 
+  let loadingMessage: Message;
+  try {
+    loadingMessage = await message.reply({ embeds: [loadingEmbed] });
+  } catch (err) {
+    console.error("Failed to send loading message:", err);
+    return;
+  }
+
+  // Fetch plugin data
   const allPlugins = await fetchPluginData();
 
   if (allPlugins.length === 0) {
-    const embed = new EmbedBuilder()
-      .setTitle("Plugin Search — Error")
-      .setDescription("Failed to fetch plugin data. Please try again later.")
-      .setColor(COLOR_BROKEN); // Use BROKEN color for errors
-    await sendEmbedReply(message, embed); // ephemeral set to true for usage message
+    const errorEmbed = new EmbedBuilder()
+      .setTitle("ShiggyBot")
+      .setDescription("❌ Failed to fetch plugin data. Please try again later.")
+      .setColor(STATUS_COLORS.broken)
+      .setTimestamp();
+
+    try {
+      await loadingMessage.edit({ embeds: [errorEmbed] });
+    } catch (err) {
+      console.error("Failed to update loading message with error:", err);
+    }
     return;
   }
 
-  const scoreThreshold = 0.4; // Only include matches with a similarity score above this threshold
-
+  // Search and score plugins
+  const scoreThreshold = 6.0; // Higher threshold for better quality results
   const searchResults = allPlugins
     .map((plugin) => ({
       plugin,
-      score: fuzzyMatch(plugin.name, query),
+      score: calculateSimilarity(plugin.name, query),
     }))
-    .filter((item) => item.score >= scoreThreshold) // Filter based on the new similarity score
-    .sort((a, b) => b.score - a.score); // Sort by highest score first
+    .filter((item) => item.score >= scoreThreshold)
+    .sort((a, b) => b.score - a.score);
 
-  if (searchResults.length > 0) {
-    // If only one match, show detailed info and buttons
-    if (searchResults.length === 1) {
-      const bestMatch = searchResults[0].plugin;
+  // Display results
+  if (searchResults.length === 0) {
+    const noResultsEmbed = new EmbedBuilder()
+      .setTitle("ShiggyBot")
+      .setDescription(
+        `No plugins found matching **${query}**.\n\nTry a different search term or check your spelling.`,
+      )
+      .setColor(STATUS_COLORS.default)
+      .setTimestamp();
 
-      let embedColor = COLOR_INFO; // Default color
-      switch (bestMatch.status.toLowerCase()) {
-        case "working":
-          embedColor = COLOR_WORKING;
-          break;
-        case "warning":
-          embedColor = COLOR_WARNING;
-          break;
-        case "broken":
-          embedColor = COLOR_BROKEN;
-          break;
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Plugin: ${bestMatch.name}`)
-        .setDescription(
-          bestMatch.description.length > 200
-            ? bestMatch.description.substring(0, 197) + "..."
-            : bestMatch.description,
-        )
-        .addFields(
-          {
-            name: "Authors",
-            value: bestMatch.authors.join(", ") || "N/A",
-            inline: true,
-          },
-          { name: "Status", value: bestMatch.status, inline: true },
-        )
-        .setColor(embedColor);
-
-      if (bestMatch.warningMessage) {
-        embed.addFields({
-          name: "Warning",
-          value: bestMatch.warningMessage,
-          inline: false,
-        });
-      }
-
-      const buttonsRow = new ActionRowBuilder<ButtonBuilder>();
-      if (bestMatch.installUrl) {
-        buttonsRow.addComponents(
-          new ButtonBuilder()
-            .setLabel("Copy Install Link")
-            .setStyle(ButtonStyle.Primary)
-            .setCustomId(`plugin_install_ephemeral_${bestMatch.installUrl}`),
-        );
-      }
-      if (bestMatch.sourceUrl) {
-        buttonsRow.addComponents(
-          new ButtonBuilder()
-            .setLabel("Source Code")
-            .setStyle(ButtonStyle.Link)
-            .setURL(bestMatch.sourceUrl),
-        );
-      }
-
-      await loadingMessage.edit({
-        // Use edit on loadingMessage
-        embeds: [embed],
-        components: buttonsRow.components.length > 0 ? [buttonsRow] : [],
-      });
-    } else {
-      // Multiple matches, show a list of top results
-      const embed = new EmbedBuilder()
-        .setTitle(`Plugin Search Results for \"${query}\"`)
-        .setDescription("Here are the top matching plugins:")
-        .setColor(COLOR_INFO);
-
-      const components: ActionRowBuilder<ButtonBuilder>[] = [];
-      const maxResults = 5; // Display up to 5 results
-      searchResults.slice(0, maxResults).forEach((item, index) => {
-        const plugin = item.plugin;
-        let statusEmoji = "⚪"; // White circle for unknown status
-        switch (plugin.status.toLowerCase()) {
-          case "working":
-            statusEmoji = "🟢"; // Green circle
-            break;
-          case "warning":
-            statusEmoji = "🟡"; // Yellow circle
-            break;
-          case "broken":
-            statusEmoji = "🔴"; // Red circle
-            break;
-        }
-        embed.addFields({
-          name: `${index + 1}. ${statusEmoji} ${plugin.name}`,
-          value: `*${
-            plugin.description.length > 100
-              ? plugin.description.substring(0, 97) + "..."
-              : plugin.description
-          }*`,
-          inline: false,
-        });
-
-        const buttonsRow = new ActionRowBuilder<ButtonBuilder>();
-        if (plugin.installUrl) {
-          buttonsRow.addComponents(
-            new ButtonBuilder()
-              .setLabel(`Copy ${plugin.name}`)
-              .setStyle(ButtonStyle.Primary)
-              .setCustomId(`plugin_install_ephemeral_${plugin.installUrl}`),
-          );
-        }
-        if (plugin.sourceUrl) {
-          buttonsRow.addComponents(
-            new ButtonBuilder()
-              .setLabel(`Source ${plugin.name}`)
-              .setStyle(ButtonStyle.Link)
-              .setURL(plugin.sourceUrl),
-          );
-        }
-
-        if (buttonsRow.components.length > 0) {
-          components.push(buttonsRow);
-        }
-      });
-
-      await loadingMessage.edit({
-        embeds: [embed],
-        components: components.length > 0 ? components : [],
-      });
+    try {
+      await loadingMessage.edit({ embeds: [noResultsEmbed] });
+    } catch (err) {
+      console.error("Failed to update loading message with no results:", err);
     }
-  } else {
-    const embed = new EmbedBuilder()
-      .setTitle("Plugin Search — No Results")
-      .setDescription(`No plugins found matching "${query}".`)
-      .setColor(COLOR_INFO); // Use INFO color for no results
-    await loadingMessage.edit({ embeds: [embed] }); // Use edit on loadingMessage
+    return;
   }
+
+  if (searchResults.length === 1) {
+    await showSinglePlugin(message, searchResults[0].plugin, loadingMessage);
+  } else {
+    await showMultiplePlugins(message, query, searchResults, loadingMessage);
+  }
+}
+
+// EXPORTED helper function for button handler
+export function getPluginByHash(
+  plugins: Plugin[],
+  hash: string,
+): Plugin | null {
+  return plugins.find((p) => generatePluginHash(p.name) === hash) || null;
 }

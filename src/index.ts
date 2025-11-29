@@ -23,18 +23,14 @@
  * - Add more entries to the `commands` array or implement a dynamic command loader.
  * - Add event listeners for `messageCreate`, `guildMemberAdd`, etc.
  */
-
 import dotenv from "dotenv";
 dotenv.config();
-import http from "http";
+import { default as fetch } from "node-fetch";
 import {
   Client,
   GatewayIntentBits,
-  REST,
-  Routes,
   Interaction,
   EmbedBuilder,
-  ButtonInteraction,
 } from "discord.js";
 import {
   initWebhookLogger,
@@ -46,35 +42,33 @@ import { autoPreviewCodeLinks } from "./Previews/codePreview";
 import { autoPreviewCommitLinks } from "./Previews/commitPreview";
 import { startDashboard } from "./dashboard";
 import { notes } from "./snotes";
-import { runPluginSearch } from "./commands/utility/plugin";
+
+import {
+  runPluginSearch,
+  getPluginByHash,
+  PLUGIN_LIST_URL,
+  Plugin,
+} from "./commands/utility/plugin";
 
 const {
   DISCORD_TOKEN,
   CLIENT_ID,
-  DEV_GUILD_ID, // optional: for quicker command registration during development
+  DEV_GUILD_ID,
   LOG_WEBHOOK_URL,
   DASHBOARD_PORT,
 } = process.env;
+
+// PLUGIN_LIST_URL is now imported from plugin.ts, but kept here for backward compatibility
+// with your previous file version. However, it's safer to ensure the import is used:
+// const PLUGIN_LIST_URL = "https://raw.githubusercontent.com/Purple-EyeZ/Plugins-List/refs/heads/main/src/plugins-data.json";
 
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN environment variable. Exiting.");
   process.exit(1);
 }
 
-/**
- * Define commands here. For larger projects you can:
- * - Move commands into separate files under `src/commands` and import them dynamically.
- * - Create both command data and run handlers alongside.
- */
 const commands: any[] = [];
 
-/**
- * Create client. Choose intents you need — we include `Guilds` and `GuildMembers`
- * because we will be fetching and modifying member roles.
- *
- * If you plan to use message content (prefix commands) you must enable `MessageContent`
- * in the developer portal and add the intent here (and be aware of privileged intent requirements).
- */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -84,11 +78,9 @@ const client = new Client({
   ],
 });
 
-// Initialize webhook logger (if configured) and attach process-level handlers.
-// This runs early so unhandled errors during startup are captured.
 initWebhookLogger(LOG_WEBHOOK_URL);
 attachProcessHandlers();
-// Best-effort informational log that logger is initialized.
+
 try {
   logInfo("Webhook logger initialized", {
     env: DEV_GUILD_ID ? "dev" : "prod",
@@ -105,10 +97,8 @@ try {
 async function registerCommands() {
   try {
     if (!client.application?.owner) {
-      // Ensure the application is fetched
       await client.application?.fetch();
     }
-
     if (DEV_GUILD_ID) {
       console.log(`Registering commands to guild ${DEV_GUILD_ID}...`);
       const guild = await client.guilds.fetch(DEV_GUILD_ID);
@@ -116,67 +106,62 @@ async function registerCommands() {
       console.log("Commands registered to guild.");
     } else {
       if (!CLIENT_ID) {
-        console.warn(
-          "CLIENT_ID not provided. Registering global commands using client.application may still work if the app is linked.",
-        );
+        console.warn("CLIENT_ID not provided. Registering global commands.");
       }
       console.log("Registering global application commands...");
       await client.application?.commands.set(commands);
-      console.log("Global commands registered (may take some time to appear).");
+      console.log("Global commands registered.");
     }
   } catch (err) {
     console.error("Failed to register commands:", err);
   }
 }
 
-/**
- * Interaction handler (slash commands).
- */
 client.on("interactionCreate", async (interaction: Interaction) => {
   if (interaction.isChatInputCommand()) {
     try {
-      // No built-in slash commands in this scaffold by default.
-      // Reply with a simple unimplemented message for any chat command.
       await interaction.reply({
         content: "Command not implemented.",
         ephemeral: true,
       });
     } catch (err) {
       console.error("Unhandled chat input command error:", err);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "Internal error while handling command.",
-          ephemeral: true,
-        });
-      } else {
-        await interaction.editReply({
-          content: "Internal error while handling command.",
-        });
-      }
     }
   } else if (interaction.isButton()) {
-    if (interaction.customId.startsWith("plugin_install_ephemeral_")) {
-      const installUrl = interaction.customId.replace(
-        "plugin_install_ephemeral_",
-        "",
-      );
+    // LISTEN FOR "plg_" HERE to match plugin.ts
+    if (interaction.customId.startsWith("plg_")) {
+      const hash = interaction.customId.replace("plg_", "");
+
+      // Immediately defer to prevent timeout error
+      await interaction.deferReply({ ephemeral: true });
+
       try {
-        const embed = new EmbedBuilder()
-          .setTitle("Install Link")
-          .setDescription(installUrl);
-        await interaction.reply({ embeds: [embed], ephemeral: true });
-      } catch (err) {
-        console.error("Failed to send ephemeral reply for install link:", err);
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({
-            content: "Internal error while handling button click.",
-            ephemeral: true,
-          });
+        const response = await fetch(PLUGIN_LIST_URL);
+        if (!response.ok) throw new Error("Failed to fetch plugin list");
+
+        const plugins = (await response.json()) as Plugin[];
+
+        // Match the hash to a plugin
+        const plugin = getPluginByHash(plugins, hash);
+
+        if (plugin && plugin.installUrl) {
+          const embed = new EmbedBuilder()
+            .setTitle(`Install ${plugin.name}`)
+            .setDescription(plugin.installUrl)
+            .setColor(0x00ff00);
+
+          await interaction.editReply({ embeds: [embed] });
         } else {
           await interaction.editReply({
-            content: "Internal error while handling button click.",
+            content:
+              "❌ Could not find the install link. Plugin may have been updated.",
           });
         }
+      } catch (err) {
+        console.error("Failed to handle plugin button:", err);
+        await interaction.editReply({
+          content: "Internal error while fetching plugin details.",
+        });
       }
     }
   }
@@ -211,56 +196,31 @@ let _initLock = false;
 const onClientReady = async () => {
   // Prevent concurrent ready initializations which can lead to duplicate
   // listeners being registered (e.g. prefix handler attached twice).
-  if (_initLock) {
-    console.log(
-      "Ready handler invoked while initialization is already in progress; skipping duplicate invocation.",
-    );
-    return;
-  }
+  if (_initLock) return;
   _initLock = true;
 
   try {
-    // If we have any previous cleanup functions, run them first so we can
-    // re-initialize modules cleanly (helpful during hot-reload / respawn).
     if (_cleanupFns.length > 0) {
-      try {
-        console.log(
-          `Re-initializing modules: running ${_cleanupFns.length} cleanup function(s).`,
-        );
-        for (const fn of _cleanupFns) {
-          try {
-            fn();
-          } catch (err) {
-            console.error("Module cleanup function threw:", err);
-          }
+      for (const fn of _cleanupFns) {
+        try {
+          fn();
+        } catch (err) {
+          console.error(err);
         }
-      } finally {
-        _cleanupFns = [];
       }
+      _cleanupFns = [];
     }
 
     const c: any = client;
     console.log(`Logged in as ${c.user?.tag} (id: ${c.user?.id})`);
-    try {
-      await logInfo("Bot ready", {
-        user: `${c.user?.tag}`,
-        id: `${c.user?.id}`,
-      });
-    } catch {
-      // ignore logging failures
-    }
     await registerCommands();
-    console.log(
-      "Bot is ready. Add more listeners and commands in src/ to extend functionality.",
-    );
+    console.log("Bot is ready.");
 
-    // Start dashboard after bot is ready
     try {
       const { startDashboard } = await import("./dashboard");
       const dashboardPort = DASHBOARD_PORT
         ? parseInt(DASHBOARD_PORT, 10)
         : 14150;
-      // Pass the running Discord client so the dashboard can access guild/member APIs
       startDashboard(dashboardPort, client);
     } catch (err) {
       console.error("Failed to start dashboard:", err);
@@ -271,66 +231,19 @@ const onClientReady = async () => {
     // Missing modules or missing exports are handled gracefully.
     try {
       const eventsMod: any = await import("./events");
-
-      const startPresence =
-        eventsMod?.startPresence ??
-        eventsMod?.setupPresence ??
-        eventsMod?.default ??
-        eventsMod;
-      const setupAutoRole =
-        eventsMod?.setupAutoRole ?? eventsMod?.default ?? eventsMod;
+      const startPresence = eventsMod?.startPresence ?? eventsMod?.default;
+      const setupAutoRole = eventsMod?.setupAutoRole ?? eventsMod?.default;
 
       if (typeof startPresence === "function") {
-        try {
-          const maybeCleanup = await startPresence(client);
-          if (typeof maybeCleanup === "function") {
-            _cleanupFns.push(maybeCleanup);
-          }
-          console.log("Presence module started.");
-        } catch (err) {
-          console.error("Failed to start presence module:", err);
-        }
+        const cleanup = await startPresence(client);
+        if (typeof cleanup === "function") _cleanupFns.push(cleanup);
       }
-
       if (typeof setupAutoRole === "function") {
-        try {
-          const maybeCleanup = await setupAutoRole(client);
-          if (typeof maybeCleanup === "function") {
-            _cleanupFns.push(maybeCleanup);
-          }
-          console.log("Autorole module initialized.");
-        } catch (err) {
-          console.error("Failed to initialize autorole handler:", err);
-        }
-      }
-
-      // Try to load the prefix commands module (src/events/prefixCommands.ts) and start it
-      try {
-        const prefixMod: any = await import("./events/prefixCommands");
-        const setupPrefix =
-          prefixMod?.setupPrefixCommands ?? prefixMod?.default ?? prefixMod;
-        if (typeof setupPrefix === "function") {
-          try {
-            // The prefix handler may return a cleanup function (unregister).
-            // Capture it so we can call it before re-initialization.
-            const cleanup = setupPrefix(client);
-            if (typeof cleanup === "function") {
-              _cleanupFns.push(cleanup);
-            }
-            console.log("Prefix commands handler initialized.");
-          } catch (err) {
-            console.error("Failed to initialize prefix commands handler:", err);
-          }
-        }
-      } catch (err) {
-        // It's optional; log at debug level
-        console.debug(
-          "Prefix commands module not loaded (optional):",
-          (err as any)?.message ?? err,
-        );
+        const cleanup = await setupAutoRole(client);
+        if (typeof cleanup === "function") _cleanupFns.push(cleanup);
       }
     } catch (err) {
-      console.error("Failed to initialize optional events module:", err);
+      console.error("Failed to init events:", err);
     }
   } finally {
     // Release the initialization lock so subsequent ready events can re-run
@@ -347,13 +260,12 @@ try {
   // emitting the deprecation warning on modern discord.js installations.
   // This keeps behavior safe across different environments and bundlers.\
   // Note: require is used here because it's a simple, resilient way to read
-  // the installed package version at runtime.\
+  // the installed package version at runtime.
   const djsPkg = require("discord.js/package.json");
   const djsMajor = parseInt(String(djsPkg.version).split(".")[0], 10) || 0;
   if (djsMajor >= 15) {
     client.on("clientReady", onClientReady);
   } else {
-    // For older v14 installs, listen to `ready`.\
     client.on("ready", onClientReady as any);
   }
 } catch (err) {
@@ -368,55 +280,39 @@ try {
 client.on("messageCreate", async (message) => {
   try {
     if (message.author?.bot) return;
-    // Log a short preview of the message (truncate content for safety)
-    const preview =
-      typeof message.content === "string" ? message.content.slice(0, 200) : "";
-    console.log(
-      `raw: messageCreate from ${
-        message.author?.tag ?? message.author?.id ?? "unknown"
-      } ` +
-        `guild=${message.guild?.id ?? "DM"} channel=${
-          message.channel?.id ?? "unknown"
-        } ` +
-        `content_len=${message.content?.length ?? 0} preview="${preview}"`,
-    );
 
-    // Snote sticky note command: Snote <topic>
     const messageContentLower = message.content.toLowerCase();
+
+    // Sticky Notes
     if (messageContentLower.startsWith("snote")) {
       const topic = messageContentLower.slice(6).trim();
-
       if (!topic) {
-        // Display available notes in an embed
         const availableNotes = Object.keys(notes)
-          .map((note) => `**${note}**`)
+          .map((n) => `**${n}**`)
           .join(", ");
         const embed = new EmbedBuilder()
           .setTitle("Need a Snote?")
-          .setDescription(`${availableNotes}`)
+          .setDescription(availableNotes)
           .setColor(0xffeac4);
-
         await message.channel.send({ embeds: [embed] });
         return;
       }
-
       const note = notes[topic];
-
       if (note) {
         const content = Array.isArray(note.content)
           ? note.content.join("\n")
           : note.content;
-
         const embed = new EmbedBuilder()
           .setTitle(note.title)
           .setDescription(content)
           .setColor(0xffeac4);
 
-        if (message.reference?.messageId) {
+        const messageIdToReplyTo = message.reference?.messageId;
+
+        if (messageIdToReplyTo) {
           await message.channel.send({
             embeds: [embed],
-            reply: { messageReference: message.reference.messageId },
-            allowedMentions: { repliedUser: true },
+            reply: { messageReference: messageIdToReplyTo },
           });
         } else {
           await message.channel.send({
@@ -426,56 +322,36 @@ client.on("messageCreate", async (message) => {
       } else {
         await message.channel.send({
           content: `No sticky note found for "${topic}".`,
-          allowedMentions: { repliedUser: false },
         });
       }
       return;
     }
 
-    // Plugin search command: [[<plugin_name>]] or Splug <plugin_name>
+    // Plugin Search
     let pluginQuery = "";
     if (messageContentLower.startsWith("splug ")) {
       pluginQuery = message.content.slice(6).trim();
     } else {
       const match = message.content.match(/^\[\[(.*?)\]\]$/);
-      if (match && match[1]) {
-        pluginQuery = match[1].trim();
-      }
+      if (match && match[1]) pluginQuery = match[1].trim();
     }
 
     if (pluginQuery) {
       await runPluginSearch(message, [pluginQuery]);
-      return; // Stop processing further if plugin command was handled
+      return;
     }
 
-    // Automatically preview code links in any message
     await autoPreviewCodeLinks(message);
-    // Automatically preview commit links in any message
     await autoPreviewCommitLinks(message);
   } catch (err) {
-    console.error("raw messageCreate logger error:", err);
+    console.error("messageCreate error:", err);
   }
 });
 
 /**
  * Login
  */
-client.login(DISCORD_TOKEN).catch(async (err) => {
+client.login(DISCORD_TOKEN).catch((err) => {
   console.error("Failed to login:", err);
-  try {
-    await logError(err, { stage: "login" });
-  } catch {
-    // ignore logger errors
-  }
   process.exit(1);
 });
-
-/**
- * Helpful notes for extension:
- * - To add more commands, create structured command modules (command data + execute function)
- *   and load them dynamically into `commands` at runtime.
- * - Consider adding a simple command loader that reads `src/commands/*.ts`.
- * - For persistent state (who requested roles, settings per-guild), integrate a small DB
- *   (SQLite, JSON file, or a hosted DB). Keep secrets in environment variables.
- * - Add better error handling and logging (Sentry, pino, winston).
- */

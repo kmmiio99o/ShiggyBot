@@ -59,7 +59,7 @@ function parseDurationToMs(input: string): number | null {
 
 export default async function runTimeout(
   message: Message,
-  args: string[]
+  args: string[],
 ): Promise<void> {
   // Helper that attempts to reply with an embed, falling back to channel send or plain text
   async function sendEmbedReply(
@@ -69,7 +69,7 @@ export default async function runTimeout(
       description?: string;
       color?: number;
       fields?: { name: string; value: string; inline?: boolean }[];
-    }
+    },
   ) {
     const embed = {
       title: opts.title ?? "ShiggyBot",
