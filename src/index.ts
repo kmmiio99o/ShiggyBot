@@ -5,7 +5,7 @@
  * - Loads configuration from environment variables (via dotenv).
  * - Registers a simple slash command `/getrole` that assigns a configured role to the invoking user.
  * - Demonstrates runtime registration of commands (guild-scoped when `DEV_GUILD_ID` is provided,
- *   otherwise registers globally).
+ * otherwise registers globally).
  * - Clean, easy-to-extend structure and clear places to add more commands / handlers.
  *
  * Environment variables expected:
@@ -23,14 +23,19 @@
  * - Add more entries to the `commands` array or implement a dynamic command loader.
  * - Add event listeners for `messageCreate`, `guildMemberAdd`, etc.
  */
+
 import dotenv from "dotenv";
 dotenv.config();
+import http from "http";
 import { default as fetch } from "node-fetch";
 import {
   Client,
   GatewayIntentBits,
+  REST,
+  Routes,
   Interaction,
   EmbedBuilder,
+  ButtonInteraction,
 } from "discord.js";
 import {
   initWebhookLogger,
@@ -43,11 +48,12 @@ import { autoPreviewCommitLinks } from "./Previews/commitPreview";
 import { startDashboard } from "./dashboard";
 import { notes } from "./snotes";
 
+// FIX: Import Plugin as a TYPE only to prevent runtime errors
+import type { Plugin } from "./commands/utility/plugin";
 import {
   runPluginSearch,
   getPluginByHash,
   PLUGIN_LIST_URL,
-  Plugin,
 } from "./commands/utility/plugin";
 
 const {
@@ -57,10 +63,6 @@ const {
   LOG_WEBHOOK_URL,
   DASHBOARD_PORT,
 } = process.env;
-
-// PLUGIN_LIST_URL is now imported from plugin.ts, but kept here for backward compatibility
-// with your previous file version. However, it's safer to ensure the import is used:
-// const PLUGIN_LIST_URL = "https://raw.githubusercontent.com/Purple-EyeZ/Plugins-List/refs/heads/main/src/plugins-data.json";
 
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN environment variable. Exiting.");
@@ -89,11 +91,6 @@ try {
   // ignore initialization errors
 }
 
-/**
- * Register slash commands on startup.
- * If DEV_GUILD_ID is provided the commands are registered to that guild (instant).
- * Otherwise registers globally (can take up to 1 hour to propagate).
- */
 async function registerCommands() {
   try {
     if (!client.application?.owner) {
@@ -117,6 +114,9 @@ async function registerCommands() {
   }
 }
 
+/**
+ * Interaction handler (slash commands and buttons).
+ */
 client.on("interactionCreate", async (interaction: Interaction) => {
   if (interaction.isChatInputCommand()) {
     try {
@@ -128,7 +128,7 @@ client.on("interactionCreate", async (interaction: Interaction) => {
       console.error("Unhandled chat input command error:", err);
     }
   } else if (interaction.isButton()) {
-    // LISTEN FOR "plg_" HERE to match plugin.ts
+    // Button handler for 'plg_' prefix
     if (interaction.customId.startsWith("plg_")) {
       const hash = interaction.customId.replace("plg_", "");
 
@@ -139,9 +139,9 @@ client.on("interactionCreate", async (interaction: Interaction) => {
         const response = await fetch(PLUGIN_LIST_URL);
         if (!response.ok) throw new Error("Failed to fetch plugin list");
 
+        // Use the imported Plugin type
         const plugins = (await response.json()) as Plugin[];
 
-        // Match the hash to a plugin
         const plugin = getPluginByHash(plugins, hash);
 
         if (plugin && plugin.installUrl) {
@@ -194,8 +194,6 @@ let _cleanupFns: Array<() => void> = [];
 let _initLock = false;
 
 const onClientReady = async () => {
-  // Prevent concurrent ready initializations which can lead to duplicate
-  // listeners being registered (e.g. prefix handler attached twice).
   if (_initLock) return;
   _initLock = true;
 
@@ -226,9 +224,6 @@ const onClientReady = async () => {
       console.error("Failed to start dashboard:", err);
     }
 
-    // Initialize optional events from the `src/events` barrel (presence, autorole),
-    // and initialize prefix-based commands if available.
-    // Missing modules or missing exports are handled gracefully.
     try {
       const eventsMod: any = await import("./events");
       const startPresence = eventsMod?.startPresence ?? eventsMod?.default;
@@ -242,18 +237,40 @@ const onClientReady = async () => {
         const cleanup = await setupAutoRole(client);
         if (typeof cleanup === "function") _cleanupFns.push(cleanup);
       }
+
+      // THIS SECTION IS CRITICAL FOR YOUR OTHER COMMANDS
+      try {
+        const prefixMod: any = await import("./events/prefixCommands");
+        const setupPrefix =
+          prefixMod?.setupPrefixCommands ?? prefixMod?.default ?? prefixMod;
+        if (typeof setupPrefix === "function") {
+          try {
+            const cleanup = setupPrefix(client);
+            if (typeof cleanup === "function") {
+              _cleanupFns.push(cleanup);
+            }
+            console.log("Prefix commands handler initialized.");
+          } catch (err) {
+            console.error("Failed to initialize prefix commands handler:", err);
+          }
+        }
+      } catch (err) {
+        console.debug(
+          "Prefix commands module not loaded (optional):",
+          (err as any)?.message ?? err,
+        );
+      }
     } catch (err) {
       console.error("Failed to init events:", err);
     }
   } finally {
-    // Release the initialization lock so subsequent ready events can re-run
     _initLock = false;
   }
 };
 
 // Use `on` for ready events to support multiple invocations (we handle cleanup
 // and re-initialization inside the handler). Choose the correct event name based
-// on the installed discord.js major version to avoid deprecation warnings in v15+.\
+// on the installed discord.js major version to avoid deprecation warnings in v15+.
 try {
   // Read discord.js package.json to determine major version at runtime.
   // If this fails for any reason, prefer the new `clientReady` event to avoid
@@ -270,13 +287,10 @@ try {
   }
 } catch (err) {
   // If we can't determine the version at runtime (packaging, bundlers, etc.),
-  // prefer the modern event name to avoid the deprecation warning on v15+.\
+  // prefer the modern event name to avoid the deprecation warning on v15+.
   client.on("clientReady", onClientReady);
 }
 
-// TEMPORARY: raw messageCreate listener to confirm messages are arriving at the client.
-// This will log non-bot messages (guild/DM) with basic metadata. Keep this temporarily for debugging,
-// then remove it once you've confirmed events are delivered.
 client.on("messageCreate", async (message) => {
   try {
     if (message.author?.bot) return;
@@ -332,7 +346,7 @@ client.on("messageCreate", async (message) => {
     if (messageContentLower.startsWith("splug ")) {
       pluginQuery = message.content.slice(6).trim();
     } else {
-      const match = message.content.match(/^\[\[(.*?)\]\]$/);
+      const match = message.content.match(/^\[\[(.*?)]]$/);
       if (match && match[1]) pluginQuery = match[1].trim();
     }
 
