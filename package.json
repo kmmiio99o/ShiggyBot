@@ -33,8 +33,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.{ts,js}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json,md}\"",
-    "clean": "rimraf dist .turbo",
-    "docs": "node ./scripts/generate-readme.js || true"
+    "clean": "rimraf dist .turbo"
   },
   "dependencies": {
     "@types/node": "^24.10.0",
