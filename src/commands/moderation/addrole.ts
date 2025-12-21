@@ -1,5 +1,5 @@
 import { Message, PermissionFlagsBits } from "discord.js";
-import { PrefixCommand } from "../../types";
+import { PrefixCommand } from "../types";
 
 const addroleCommand: PrefixCommand = {
   name: "addrole",
@@ -32,7 +32,9 @@ const addroleCommand: PrefixCommand = {
     }
 
     const role = message.guild.roles.cache.find(
-      (r) => r.name === roleIdentifier || r.id === roleIdentifier.replace(/[<@&>]/g, "")
+      (r) =>
+        r.name === roleIdentifier ||
+        r.id === roleIdentifier.replace(/[<@&>]/g, ""),
     );
 
     if (!role) {
@@ -41,13 +43,17 @@ const addroleCommand: PrefixCommand = {
     }
 
     if (member.roles.cache.has(role.id)) {
-      await message.reply(`${targetUser.tag} already has the ${role.name} role.`);
+      await message.reply(
+        `${targetUser.tag} already has the ${role.name} role.`,
+      );
       return;
     }
 
     try {
       await member.roles.add(role);
-      await message.reply(`Successfully added the ${role.name} role to ${targetUser.tag}.`);
+      await message.reply(
+        `Successfully added the ${role.name} role to ${targetUser.tag}.`,
+      );
     } catch (error) {
       console.error(`Failed to add role to user ${targetUser.tag}:`, error);
       await message.reply("There was an error trying to add that role.");

@@ -1,5 +1,5 @@
 import { Message } from "discord.js";
-import { PrefixCommand } from "../../types";
+import { PrefixCommand } from "../types";
 import { handlePluginSearch } from "../../services/pluginService";
 
 const pluginCommand: PrefixCommand = {

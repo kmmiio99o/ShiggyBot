@@ -1,6 +1,8 @@
 import { Client } from "discord.js";
 import { config } from "../../config";
 import { logger } from "../../utils/webhookLogger";
+import { setupPrefixCommands } from "../../commands/prefix";
+import { setupSlashCommands } from "../../commands/slash";
 
 let isInitialized = false;
 const cleanupFunctions: Array<() => void> = [];
@@ -30,10 +32,10 @@ export function setupReadyHandler(client: Client): () => void {
     }
   };
 
-  client.on("ready", handleReady);
+  client.on("clientReady", handleReady);
 
   return () => {
-    client.off("ready", handleReady);
+    client.off("clientReady", handleReady);
   };
 }
 
@@ -72,27 +74,25 @@ async function initializeFeatures(client: Client) {
       console.warn("⚠️ Failed to load presence feature:", error);
     }
 
-    // Initialize prefix commands
+    // Initialize prefix commands (static import)
     try {
-      const { setupPrefixCommands } = await import("../../commands/prefix");
       if (typeof setupPrefixCommands === "function") {
         const cleanup = setupPrefixCommands(client);
         if (cleanup) cleanupFunctions.push(cleanup);
         console.log("✅ Prefix commands initialized");
       }
     } catch (error) {
-      console.warn("⚠️ Failed to load prefix commands:", error);
+      console.warn("⚠️ Failed to initialize prefix commands:", error);
     }
 
-    // Initialize slash commands
+    // Initialize slash commands (static import)
     try {
-      const { setupSlashCommands } = await import("../../commands/slash");
       if (typeof setupSlashCommands === "function") {
         await setupSlashCommands(client);
         console.log("✅ Slash commands initialized");
       }
     } catch (error) {
-      console.warn("⚠️ Failed to load slash commands:", error);
+      console.warn("⚠️ Failed to initialize slash commands:", error);
     }
   } catch (error) {
     console.error(

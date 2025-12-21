@@ -1,5 +1,5 @@
 import { Message } from "discord.js";
-import { PrefixCommand } from "../../types";
+import { PrefixCommand } from "../types";
 
 const googleCommand: PrefixCommand = {
   name: "google",
@@ -15,7 +15,9 @@ const googleCommand: PrefixCommand = {
     const query = args.join(" ");
     const googleSearchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 
-    await message.reply(`Here's what I found on Google for "${query}":\n${googleSearchUrl}`);
+    await message.reply(
+      `Here's what I found on Google for "${query}":\n${googleSearchUrl}`,
+    );
   },
 };
 

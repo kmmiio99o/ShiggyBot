@@ -1,5 +1,5 @@
 import { Message, PermissionFlagsBits } from "discord.js";
-import { PrefixCommand } from "../../types";
+import { PrefixCommand } from "../types";
 
 const removeroleCommand: PrefixCommand = {
   name: "removerole",
@@ -32,7 +32,9 @@ const removeroleCommand: PrefixCommand = {
     }
 
     const role = message.guild.roles.cache.find(
-      (r) => r.name === roleIdentifier || r.id === roleIdentifier.replace(/[<@&>]/g, "")
+      (r) =>
+        r.name === roleIdentifier ||
+        r.id === roleIdentifier.replace(/[<@&>]/g, ""),
     );
 
     if (!role) {
@@ -41,15 +43,22 @@ const removeroleCommand: PrefixCommand = {
     }
 
     if (!member.roles.cache.has(role.id)) {
-      await message.reply(`${targetUser.tag} does not have the ${role.name} role.`);
+      await message.reply(
+        `${targetUser.tag} does not have the ${role.name} role.`,
+      );
       return;
     }
 
     try {
       await member.roles.remove(role);
-      await message.reply(`Successfully removed the ${role.name} role from ${targetUser.tag}.`);
+      await message.reply(
+        `Successfully removed the ${role.name} role from ${targetUser.tag}.`,
+      );
     } catch (error) {
-      console.error(`Failed to remove role from user ${targetUser.tag}:`, error);
+      console.error(
+        `Failed to remove role from user ${targetUser.tag}:`,
+        error,
+      );
       await message.reply("There was an error trying to remove that role.");
     }
   },

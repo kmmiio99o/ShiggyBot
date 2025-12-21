@@ -77,7 +77,7 @@ function setupShutdownHandlers(client: any) {
   // Handle different shutdown signals
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
-  process.on("SIGUSR2", () => shutdown("SIGUSR2")); // For nodemon
+  process.on("SIGUSR2", () => shutdown("SIGUSR2"));
 }
 
 // Start the bot

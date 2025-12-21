@@ -1,5 +1,5 @@
 import { Message } from "discord.js";
-import { PrefixCommand } from "../../types";
+import { PrefixCommand } from "../types";
 
 const pingCommand: PrefixCommand = {
   name: "ping",
@@ -7,7 +7,9 @@ const pingCommand: PrefixCommand = {
   async execute(message: Message) {
     const sent = await message.reply("Pinging...");
     const latency = sent.createdTimestamp - message.createdTimestamp;
-    await sent.edit(`Pong! Latency: ${latency}ms. API Latency: ${Math.round(message.client.ws.ping)}ms`);
+    await sent.edit(
+      `Pong! Latency: ${latency}ms. API Latency: ${Math.round(message.client.ws.ping)}ms`,
+    );
   },
 };
 
