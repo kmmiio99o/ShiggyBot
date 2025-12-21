@@ -4,32 +4,34 @@ import {
   EmbedBuilder,
   GuildMember,
   User,
+  Colors,
 } from "discord.js";
 import { PrefixCommand } from "../types";
 
-/**
- * Kick command
- *
- * Usage:
- *  Skick @user [reason...]
- *
- * Behavior:
- * - Requires caller to have KickMembers permission.
- * - Requires bot to have KickMembers permission.
- * - Validates role hierarchy (caller must be higher than target, bot must be higher).
- * - Prevents kicking the guild owner, the bot, or the caller.
- * - Does not DM the target; performs the kick immediately.
- * - Returns a confirmation embed on success or a helpful error message on failure.
- */
 const kickCommand: PrefixCommand = {
   name: "kick",
   description: "Kick a member from the server.",
   usage: "<user> [reason]",
   permissions: [PermissionFlagsBits.KickMembers],
   async execute(message: Message, args: string[]) {
+    const createErrorEmbed = (title: string, description: string) => {
+      return new EmbedBuilder()
+        .setTitle(title)
+        .setColor(Colors.Red)
+        .setDescription(description)
+        .setTimestamp();
+    };
+
     // Must be used in a guild
     if (!message.guild) {
-      await message.reply("This command can only be used in a server.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ This command can only be used in a server.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -37,25 +39,40 @@ const kickCommand: PrefixCommand = {
     const botMember = message.guild.members.me;
 
     if (!executor) {
-      await message.reply(
-        "Could not resolve your guild membership information.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ Could not resolve your guild membership information.",
+          ),
+        ],
+      });
       return;
     }
 
     // Executor permission check
     if (!executor.permissions.has(PermissionFlagsBits.KickMembers)) {
-      await message.reply(
-        "❌ You need the `Kick Members` permission to use this command.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Permission Denied",
+            "❌ You need the `Kick Members` permission to use this command.",
+          ),
+        ],
+      });
       return;
     }
 
     // Bot permission check
     if (!botMember?.permissions.has(PermissionFlagsBits.KickMembers)) {
-      await message.reply(
-        "❌ I do not have the `Kick Members` permission. Please grant me that permission and try again.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Permission Error",
+            "❌ I do not have the `Kick Members` permission. Please grant me that permission and try again.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -73,24 +90,50 @@ const kickCommand: PrefixCommand = {
     }
 
     if (!targetMember || !targetUser) {
-      await message.reply(
-        "❌ Could not find that user in this server. Please mention them or provide their ID.\n" +
-          "Usage: `Skick @user [reason]`",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "User Not Found",
+            `❌ Could not find that user in this server.
+
+**Usage:** \`${process.env.PREFIX || "S"}kick @user [reason]\`
+**Example:** \`${process.env.PREFIX || "S"}kick @user Breaking server rules\`
+
+• Mention the user directly
+• Or provide their user ID
+• Ensure they are currently in this server`,
+          ),
+        ],
+      });
       return;
     }
 
     // Prevent kicking self, bot, or server owner
     if (targetUser.id === message.author.id) {
-      await message.reply("❌ You cannot kick yourself.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed("Invalid Target", "❌ You cannot kick yourself."),
+        ],
+      });
       return;
     }
     if (targetUser.id === message.client.user?.id) {
-      await message.reply("❌ I cannot kick myself.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed("Invalid Target", "❌ I cannot kick myself."),
+        ],
+      });
       return;
     }
     if (targetUser.id === message.guild.ownerId) {
-      await message.reply("❌ You cannot kick the server owner.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Target",
+            "❌ You cannot kick the server owner.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -104,25 +147,40 @@ const kickCommand: PrefixCommand = {
       message.guild.ownerId !== message.author.id &&
       executorHighest <= targetHighest
     ) {
-      await message.reply(
-        "❌ You cannot kick this member because they have an equal or higher role than you.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Role Hierarchy",
+            "❌ You cannot kick this member because they have an equal or higher role than you.",
+          ),
+        ],
+      });
       return;
     }
 
     // Bot must be able to kick (role hierarchy)
     if (botHighest <= targetHighest) {
-      await message.reply(
-        "❌ I cannot kick this member because their highest role is higher than (or equal to) mine.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Role Hierarchy",
+            "❌ I cannot kick this member because their highest role is higher than (or equal to) mine.",
+          ),
+        ],
+      });
       return;
     }
 
-    // Check member.kickable if present (guard for libraries/permissions)
+    // Check member.kickable if present
     if (typeof targetMember.kickable === "boolean" && !targetMember.kickable) {
-      await message.reply(
-        "❌ I do not have permission to kick that user (they may have higher role or owner privileges).",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Cannot Kick",
+            "❌ I do not have permission to kick that user. They may have:\n• A higher role than me\n• Owner privileges\n• Or I lack the proper permissions",
+          ),
+        ],
+      });
       return;
     }
 
@@ -133,20 +191,30 @@ const kickCommand: PrefixCommand = {
     try {
       await targetMember.kick(reason);
       const embed = new EmbedBuilder()
-        .setTitle("Member Kicked")
-        .setColor(0x2ecc71)
-        .setDescription(`${targetUser.tag} has been kicked.`)
+        .setTitle("👢 Member Kicked")
+        .setColor(Colors.Green)
+        .setDescription(`${targetUser.tag} has been kicked from the server.`)
         .addFields(
-          { name: "Moderator", value: `${message.author.tag}`, inline: true },
-          { name: "Reason", value: reason, inline: false },
-        );
+          { name: "👤 Member", value: targetUser.tag, inline: true },
+          { name: "🆔 ID", value: targetUser.id, inline: true },
+          { name: "🛡️ Moderator", value: message.author.tag, inline: true },
+          { name: "📝 Reason", value: reason, inline: false },
+        )
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setTimestamp()
+        .setFooter({ text: `Action performed by ${message.author.tag}` });
 
       await message.reply({ embeds: [embed] });
     } catch (error) {
       console.error("Failed to kick member:", error);
-      await message.reply(
-        "❌ Failed to kick that user. Please ensure I have the necessary permissions and role hierarchy.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Kick Failed",
+            "❌ Failed to kick that user. Please ensure:\n• I have the Kick Members permission\n• My role is higher than the target's role\n• The target is kickable\n• Discord API is not experiencing issues",
+          ),
+        ],
+      });
     }
   },
 };

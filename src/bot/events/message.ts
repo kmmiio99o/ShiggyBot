@@ -1,4 +1,11 @@
-import { Client, Message, PermissionResolvable, APIEmbed } from "discord.js";
+import {
+  Client,
+  Message,
+  PermissionResolvable,
+  APIEmbed,
+  EmbedBuilder,
+  Colors,
+} from "discord.js";
 import { config } from "../../config";
 import { logger } from "../../utils/webhookLogger";
 
@@ -107,9 +114,24 @@ async function handlePrefixCommand(
     const command = commandRegistry.getPrefixCommand(commandName);
 
     if (!command) {
-      await message
-        .reply(`❌ Unknown command: \`${config.prefix}${commandName}\``)
-        .catch(() => {});
+      const unknownCommandEmbed = new EmbedBuilder()
+        .setTitle("❌ Unknown Command")
+        .setColor(Colors.Red)
+        .setDescription(
+          `The command \`${config.prefix}${commandName}\` was not found.`,
+        )
+        .addFields({
+          name: "🔍 Did you mean?",
+          value: `Try using \`${config.prefix}help\` to see all available commands.`,
+          inline: false,
+        })
+        .setFooter({
+          text: `Requested by ${message.author.tag}`,
+          iconURL: message.author.displayAvatarURL(),
+        })
+        .setTimestamp();
+
+      await message.reply({ embeds: [unknownCommandEmbed] }).catch(() => {});
       return;
     }
 
@@ -122,11 +144,24 @@ async function handlePrefixCommand(
         );
 
       if (missingPermissions.length > 0) {
-        await message
-          .reply(
-            `❌ You are missing the following permissions to use this command: \`${missingPermissions.join(", ")}\``,
+        const permissionEmbed = new EmbedBuilder()
+          .setTitle("🔒 Permission Denied")
+          .setColor(Colors.Red)
+          .setDescription(
+            `You don't have permission to use \`${config.prefix}${commandName}\`.`,
           )
-          .catch(() => {});
+          .addFields({
+            name: "Missing Permissions",
+            value: `\`${missingPermissions.join("`, `")}\``,
+            inline: false,
+          })
+          .setFooter({
+            text: `Requested by ${message.author.tag}`,
+            iconURL: message.author.displayAvatarURL(),
+          })
+          .setTimestamp();
+
+        await message.reply({ embeds: [permissionEmbed] }).catch(() => {});
         return;
       }
     }
@@ -136,15 +171,27 @@ async function handlePrefixCommand(
     console.error(`❌ Error handling prefix command ${commandName}:`, error);
 
     // Send a user-facing embed notifying about the error
-    const embed: APIEmbed = {
-      title: "❌ Command Error",
-      description: "An error occurred while executing this command.",
-      color: 0xff5555,
-      timestamp: new Date().toISOString(),
-    };
+    const errorEmbed = new EmbedBuilder()
+      .setTitle("❌ Command Error")
+      .setColor(Colors.Red)
+      .setDescription("An error occurred while executing this command.")
+      .addFields({
+        name: "Command",
+        value: `\`${config.prefix}${commandName}\``,
+        inline: true,
+      })
+      .addFields({
+        name: "Status",
+        value: "Failed",
+        inline: true,
+      })
+      .setFooter({
+        text: `Requested by ${message.author.tag}`,
+        iconURL: message.author.displayAvatarURL(),
+      })
+      .setTimestamp();
 
-    // Use instance method `message.reply` (not the class) to respond
-    await message.reply({ embeds: [embed] }).catch(() => {});
+    await message.reply({ embeds: [errorEmbed] }).catch(() => {});
   }
 }
 

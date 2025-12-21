@@ -4,22 +4,9 @@ import {
   EmbedBuilder,
   GuildMember,
   User,
+  Colors,
 } from "discord.js";
 import { PrefixCommand } from "../types";
-
-/**
- * Immediate ban command (no confirmation, no DM).
- *
- * Usage:
- *  Sban @user [deleteDays 0-7] [reason...]
- *
- * Behavior:
- * - Requires the caller to have BanMembers permission.
- * - Requires the bot to have BanMembers permission.
- * - Ensures role hierarchy (caller must be higher than target, bot must be higher).
- * - Prevents banning the guild owner, the bot itself, or the caller.
- * - Immediately performs the ban once arguments are validated.
- */
 
 const banCommand: PrefixCommand = {
   name: "ban",
@@ -27,9 +14,24 @@ const banCommand: PrefixCommand = {
   usage: "<user> [deleteDays 0-7] [reason...]",
   permissions: [PermissionFlagsBits.BanMembers],
   async execute(message: Message, args: string[]) {
+    const createErrorEmbed = (title: string, description: string) => {
+      return new EmbedBuilder()
+        .setTitle(title)
+        .setColor(Colors.Red)
+        .setDescription(description)
+        .setTimestamp();
+    };
+
     // Only allowed in guilds
     if (!message.guild) {
-      await message.reply("This command can only be used in a server (guild).");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ This command can only be used in a server (guild).",
+          ),
+        ],
+      });
       return;
     }
 
@@ -37,23 +39,40 @@ const banCommand: PrefixCommand = {
     const botMember = message.guild.members.me;
 
     if (!executor) {
-      await message.reply("Could not resolve your guild member info.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ Could not resolve your guild member information.",
+          ),
+        ],
+      });
       return;
     }
 
     // Permission checks for executor
     if (!executor.permissions.has(PermissionFlagsBits.BanMembers)) {
-      await message.reply(
-        "❌ You need the `Ban Members` permission to use this command.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Permission Denied",
+            "❌ You need the `Ban Members` permission to use this command.",
+          ),
+        ],
+      });
       return;
     }
 
     // Bot permission check
     if (!botMember?.permissions.has(PermissionFlagsBits.BanMembers)) {
-      await message.reply(
-        "❌ I do not have the `Ban Members` permission. Please grant it to me and try again.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Permission Error",
+            "❌ I do not have the `Ban Members` permission. Please grant it to me and try again.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -77,24 +96,44 @@ const banCommand: PrefixCommand = {
     }
 
     if (!targetMember || !targetUser) {
-      await message.reply(
-        "❌ Could not find the specified user. Please mention the user or provide their ID.\n" +
-          "Usage: `Sban @user [deleteDays 0-7] [reason...]`",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "User Not Found",
+            `❌ Could not find the specified user. Please mention the user or provide their ID.
+
+**Usage:** \`${process.env.PREFIX || "S"}ban @user [deleteDays 0-7] [reason...]\`
+**Example:** \`${process.env.PREFIX || "S"}ban @user 2 Spamming chat\``,
+          ),
+        ],
+      });
       return;
     }
 
     // Prevent self / bot / owner banning
     if (targetUser.id === message.author.id) {
-      await message.reply("❌ You cannot ban yourself.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed("Invalid Target", "❌ You cannot ban yourself."),
+        ],
+      });
       return;
     }
     if (targetUser.id === message.client.user?.id) {
-      await message.reply("❌ I cannot ban myself.");
+      await message.reply({
+        embeds: [createErrorEmbed("Invalid Target", "❌ I cannot ban myself.")],
+      });
       return;
     }
     if (targetUser.id === message.guild.ownerId) {
-      await message.reply("❌ You cannot ban the server owner.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Target",
+            "❌ You cannot ban the server owner.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -107,16 +146,26 @@ const banCommand: PrefixCommand = {
       executorHighest <= targetHighest &&
       message.guild.ownerId !== message.author.id
     ) {
-      await message.reply(
-        "❌ You cannot ban this member because they have an equal or higher role than you.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Role Hierarchy",
+            "❌ You cannot ban this member because they have an equal or higher role than you.",
+          ),
+        ],
+      });
       return;
     }
 
     if (botHighest <= targetHighest) {
-      await message.reply(
-        "❌ I cannot ban this member because their highest role is higher than (or equal to) mine.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Role Hierarchy",
+            "❌ I cannot ban this member because their highest role is higher than (or equal to) mine.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -149,29 +198,43 @@ const banCommand: PrefixCommand = {
       });
 
       const success = new EmbedBuilder()
-        .setTitle("User Banned")
-        .setColor(0x2ecc71)
-        .setDescription(`${targetUser.tag} has been banned.`)
+        .setTitle("✅ User Banned")
+        .setColor(Colors.Green)
+        .setDescription(`${targetUser.tag} has been banned from the server.`)
         .addFields(
-          { name: "Moderator", value: `${message.author.tag}`, inline: true },
+          { name: "👤 Member", value: `${targetUser.tag}`, inline: true },
+          { name: "🆔 ID", value: targetUser.id, inline: true },
           {
-            name: "Deleted messages (days)",
-            value: `${deleteDays}`,
+            name: "🛡️ Moderator",
+            value: `${message.author.tag}`,
             inline: true,
           },
           {
-            name: "Reason",
+            name: "🗑️ Deleted Messages",
+            value: `${deleteDays} day(s)`,
+            inline: true,
+          },
+          {
+            name: "📝 Reason",
             value: reason || "No reason provided",
             inline: false,
           },
-        );
+        )
+        .setThumbnail(targetUser.displayAvatarURL())
+        .setTimestamp()
+        .setFooter({ text: `Action performed by ${message.author.tag}` });
 
       await message.reply({ embeds: [success] });
     } catch (err) {
       console.error("Failed to ban member:", err);
-      await message.reply(
-        "❌ Failed to ban the member. Please ensure I have the proper permissions and role hierarchy.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Ban Failed",
+            "❌ Failed to ban the member. Please ensure I have the proper permissions and role hierarchy.",
+          ),
+        ],
+      });
     }
   },
 };

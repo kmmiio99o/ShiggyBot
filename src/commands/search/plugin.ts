@@ -4,7 +4,7 @@ import { handlePluginSearch } from "../../services/pluginService";
 
 const pluginCommand: PrefixCommand = {
   name: "plugin",
-  aliases: ["plugins", "plg"],
+  aliases: ["plugins", "plg", "plug"],
   description: "Searches for plugins and displays their information.",
   usage: "<plugin name>",
   async execute(message: Message, args: string[]) {

@@ -3,25 +3,10 @@ import {
   PermissionFlagsBits,
   EmbedBuilder,
   GuildMember,
+  Colors,
 } from "discord.js";
 import { PrefixCommand } from "../types";
 
-/**
- * Timeout (mute) a member using Discord's native timeout feature.
- *
- * Usage:
- *  Stimeout @user 10m [reason]
- *
- * Duration format:
- *  - Number followed by unit: s, m, h, d (seconds, minutes, hours, days)
- *  - Examples: 30s, 10m, 2h, 1d
- *
- * Notes:
- *  - Requires the caller to have ModerateMembers permission.
- *  - Requires the bot to have ModerateMembers permission.
- *  - Caps duration to Discord's 28-day timeout maximum.
- *  - Performs role-hierarchy and basic validations.
- */
 const timeoutCommand: PrefixCommand = {
   name: "timeout",
   description:
@@ -29,8 +14,23 @@ const timeoutCommand: PrefixCommand = {
   usage: "<user> <duration> [reason]",
   permissions: [PermissionFlagsBits.ModerateMembers],
   async execute(message: Message, args: string[]) {
+    const createErrorEmbed = (title: string, description: string) => {
+      return new EmbedBuilder()
+        .setTitle(title)
+        .setColor(Colors.Red)
+        .setDescription(description)
+        .setTimestamp();
+    };
+
     if (!message.guild) {
-      await message.reply("This command can only be used in a server.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ This command can only be used in a server.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -38,29 +38,56 @@ const timeoutCommand: PrefixCommand = {
     const botMember = message.guild.members.me;
 
     if (!executor) {
-      await message.reply("Could not resolve your guild member information.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Command Error",
+            "❌ Could not resolve your guild member information.",
+          ),
+        ],
+      });
       return;
     }
 
     // Permission checks
     if (!executor.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      await message.reply(
-        "❌ You need the `Moderate Members` permission to timeout members.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Permission Denied",
+            "❌ You need the `Moderate Members` permission to timeout members.",
+          ),
+        ],
+      });
       return;
     }
 
     if (!botMember?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      await message.reply(
-        "❌ I need the `Moderate Members` permission to apply timeouts.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Permission Error",
+            "❌ I need the `Moderate Members` permission to apply timeouts.",
+          ),
+        ],
+      });
       return;
     }
 
     if (!args[0] || !args[1]) {
-      await message.reply(
-        "Usage: `Stimeout @user 10m [reason]` (duration example: 30s, 10m, 2h, 1d)",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Usage Error",
+            `❌ Please provide both a user and duration.
+
+**Usage:** \`${process.env.PREFIX || "S"}timeout @user <duration> [reason]\`
+**Duration Examples:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
+**Maximum:** 28 days
+**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
+          ),
+        ],
+      });
       return;
     }
 
@@ -74,23 +101,47 @@ const timeoutCommand: PrefixCommand = {
     }
 
     if (!target) {
-      await message.reply(
-        "❌ Could not find that member in this server. Mention them or provide their ID.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Member Not Found",
+            `❌ Could not find that member in this server.
+
+• Mention the user directly
+• Or provide their user ID
+• Ensure they are currently in this server`,
+          ),
+        ],
+      });
       return;
     }
 
     // Prevent self, bot, or server owner timeouts
     if (target.id === message.author.id) {
-      await message.reply("❌ You cannot timeout yourself.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed("Invalid Target", "❌ You cannot timeout yourself."),
+        ],
+      });
       return;
     }
     if (target.id === message.client.user?.id) {
-      await message.reply("❌ I cannot timeout myself.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed("Invalid Target", "❌ I cannot timeout myself."),
+        ],
+      });
       return;
     }
     if (target.id === message.guild.ownerId) {
-      await message.reply("❌ You cannot timeout the server owner.");
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Target",
+            "❌ You cannot timeout the server owner.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -103,16 +154,26 @@ const timeoutCommand: PrefixCommand = {
       message.guild.ownerId !== message.author.id &&
       executorHighest <= targetHighest
     ) {
-      await message.reply(
-        "❌ You cannot timeout this member because they have an equal or higher role than you.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Role Hierarchy",
+            "❌ You cannot timeout this member because they have an equal or higher role than you.",
+          ),
+        ],
+      });
       return;
     }
 
     if (botHighest <= targetHighest) {
-      await message.reply(
-        "❌ I cannot timeout this member because their role is higher than (or equal to) mine.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Bot Role Hierarchy",
+            "❌ I cannot timeout this member because their role is higher than (or equal to) mine.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -120,9 +181,21 @@ const timeoutCommand: PrefixCommand = {
     const durationToken = args[1];
     const matched = durationToken.match(/^(\d+)(s|m|h|d)$/i);
     if (!matched) {
-      await message.reply(
-        "Invalid duration format. Use examples like: 30s, 10m, 2h, 1d",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Duration Format",
+            `❌ Invalid duration format.
+
+**Valid Formats:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
+• \`s\` = seconds
+• \`m\` = minutes
+• \`h\` = hours
+• \`d\` = days
+**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
+          ),
+        ],
+      });
       return;
     }
 
@@ -147,9 +220,14 @@ const timeoutCommand: PrefixCommand = {
     }
 
     if (ms <= 0) {
-      await message.reply(
-        "Invalid duration. Use a positive duration like 30s, 10m, 2h, 1d.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Duration",
+            "❌ Invalid duration. Use a positive duration like 30s, 10m, 2h, 1d.",
+          ),
+        ],
+      });
       return;
     }
 
@@ -165,27 +243,54 @@ const timeoutCommand: PrefixCommand = {
       await target.timeout(appliedMs, `${reason} — by ${message.author.tag}`);
 
       const embed = new EmbedBuilder()
-        .setTitle("Member Timed Out")
-        .setColor(0xffa500)
+        .setTitle("⏰ Member Timed Out")
+        .setColor(Colors.Orange)
         .setDescription(`${target.user.tag} has been put in timeout.`)
         .addFields(
-          { name: "Moderator", value: `${message.author.tag}`, inline: true },
+          { name: "👤 Member", value: target.user.tag, inline: true },
+          { name: "🆔 ID", value: target.id, inline: true },
+          { name: "🛡️ Moderator", value: message.author.tag, inline: true },
           {
-            name: "Duration",
-            value: `${Math.round(appliedMs / 1000)}s`,
+            name: "⏱️ Duration",
+            value: formatDuration(appliedMs),
             inline: true,
           },
-          { name: "Reason", value: reason, inline: false },
-        );
+          {
+            name: "⏰ Expires",
+            value: `<t:${Math.floor((Date.now() + appliedMs) / 1000)}:R>`,
+            inline: true,
+          },
+          { name: "📝 Reason", value: reason, inline: false },
+        )
+        .setThumbnail(target.user.displayAvatarURL())
+        .setTimestamp()
+        .setFooter({ text: `Action performed by ${message.author.tag}` });
 
       await message.reply({ embeds: [embed] });
     } catch (err) {
       console.error("Failed to apply timeout:", err);
-      await message.reply(
-        "❌ Failed to apply timeout. Ensure I have permission and the member is eligible for timeout.",
-      );
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Timeout Failed",
+            "❌ Failed to apply timeout. Ensure:\n• I have permission to timeout members\n• The member is eligible for timeout\n• My role is higher than the target's role",
+          ),
+        ],
+      });
     }
   },
 };
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days} day(s)`;
+  if (hours > 0) return `${hours} hour(s)`;
+  if (minutes > 0) return `${minutes} minute(s)`;
+  return `${seconds} second(s)`;
+}
 
 export default timeoutCommand;
