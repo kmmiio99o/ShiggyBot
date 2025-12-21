@@ -25,6 +25,44 @@ let cachedRepoData: GitHubRepoData | null = null;
 let lastFetchTime: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 
+// Default activities used only as a true fallback when no other activities exist
+const DEFAULT_ACTIVITIES: ActivityEntry[] = [
+  { name: "welcoming new members", type: ActivityType.Watching },
+  { name: "assigning roles", type: ActivityType.Playing },
+  { name: "role requests", type: ActivityType.Listening },
+  { name: "keeping the server tidy", type: ActivityType.Competing },
+  { name: "powered by TypeScript", type: ActivityType.Playing },
+  { name: "ShiggyCord v2.0 when???", type: ActivityType.Playing },
+];
+
+// Format a date string into a human-friendly relative time like '5 hours ago'
+function formatRelativeTime(dateStr?: string | null): string {
+  if (!dateStr) return "Unknown";
+  const then = new Date(dateStr).getTime();
+  if (isNaN(then)) return "Unknown";
+
+  const seconds = Math.floor((Date.now() - then) / 1000);
+  if (seconds < 60) return `${seconds} second${seconds !== 1 ? "s" : ""} ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes !== 1 ? "s" : ""} ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days !== 1 ? "s" : ""} ago`;
+
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
+
+  const years = Math.floor(days / 365);
+  return `${years} year${years !== 1 ? "s" : ""} ago`;
+}
+
 /**
  * Normalize unknown errors into strings
  */
@@ -74,13 +112,7 @@ async function fetchGitHubRepoData(): Promise<GitHubRepoData | null> {
 
     const formattedData: GitHubRepoData = {
       stars: repoData.stargazers_count || 0,
-      lastCommit: lastCommitDate
-        ? new Date(lastCommitDate).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })
-        : "Unknown",
+      lastCommit: formatRelativeTime(lastCommitDate),
       forks: repoData.forks_count || 0,
       openIssues: repoData.open_issues_count || 0,
       language: repoData.language || "TypeScript",
@@ -121,7 +153,6 @@ async function buildDynamicActivities(): Promise<
   const activities: ActivityEntry[] = [];
 
   if (gitHubData) {
-    // Add GitHub-related activities
     activities.push(
       { name: `⭐ ${gitHubData.stars} stars`, type: ActivityType.Watching },
       {
@@ -137,20 +168,8 @@ async function buildDynamicActivities(): Promise<
     );
   }
 
-  // Add fallback/default activities
-  const defaultActivities: ActivityEntry[] = [
-    { name: "welcoming new members", type: ActivityType.Watching },
-    { name: "assigning roles", type: ActivityType.Playing },
-    { name: "role requests", type: ActivityType.Listening },
-    { name: "keeping the server tidy", type: ActivityType.Competing },
-    { name: "powered by TypeScript", type: ActivityType.Playing },
-    { name: "ShiggyCord v2.0 when???", type: ActivityType.Playing },
-  ];
-
-  // Combine GitHub activities with defaults
-  const allActivities = [...activities, ...defaultActivities];
-
-  return allActivities.map((p) => ({
+  // Only return the GitHub-driven activities
+  return activities.map((p) => ({
     name: p.name,
     type: resolveActivityType(p.type as any),
   }));
@@ -251,13 +270,12 @@ async function buildActivities(): Promise<
   // Combine: custom env activities first, then dynamic ones
   const allActivities = [...envActivities, ...dynamicActivities];
 
-  // If no activities at all, use fallbacks
+  // If no activities at all, use DEFAULT_ACTIVITIES as the true fallback
   if (allActivities.length === 0) {
-    return [
-      { name: "ShiggyCord on GitHub", type: ActivityType.Watching },
-      { name: "Open Source Project", type: ActivityType.Playing },
-      { name: "TypeScript Powered", type: ActivityType.Listening },
-    ];
+    return DEFAULT_ACTIVITIES.map((p) => ({
+      name: p.name,
+      type: resolveActivityType(p.type as any),
+    }));
   }
 
   return allActivities;

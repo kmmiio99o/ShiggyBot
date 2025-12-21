@@ -1,6 +1,6 @@
 {
   "name": "shiggybot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A lightweight, extensible Discord bot scaffold in TypeScript — easy to deploy, add commands, and extend.",
   "author": "kmmiio99o",
   "license": "MIT",
