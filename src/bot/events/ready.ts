@@ -51,9 +51,25 @@ async function initializeFeatures(client: Client) {
       const setupAutoRole =
         autoroleModule.setup || autoroleModule.default?.setup;
       if (typeof setupAutoRole === "function") {
-        const cleanup = setupAutoRole(client);
-        if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("Auto-role feature initialized");
+        // Support both synchronous cleanup return (function) and asynchronous (Promise<function>)
+        try {
+          const maybeCleanup = setupAutoRole(client) as unknown;
+          if (maybeCleanup != null) {
+            // Detect promise-like return
+            if (typeof (maybeCleanup as any).then === "function") {
+              const cleanup = await (maybeCleanup as Promise<
+                (() => void) | null | undefined
+              >);
+              if (typeof cleanup === "function") cleanupFunctions.push(cleanup);
+            } else if (typeof maybeCleanup === "function") {
+              // Synchronous cleanup function
+              cleanupFunctions.push(maybeCleanup as () => void);
+            }
+          }
+          console.log("Auto-role feature initialized");
+        } catch (innerErr: unknown) {
+          console.warn("Autorole setup resolved with an error:", innerErr);
+        }
       }
     } catch (error) {
       console.warn("Failed to load autorole feature:", error);
@@ -65,9 +81,23 @@ async function initializeFeatures(client: Client) {
       const startPresence =
         presenceModule.startPresence || presenceModule.default?.startPresence;
       if (typeof startPresence === "function") {
-        const cleanup = startPresence(client);
-        if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("Presence feature initialized");
+        // startPresence may return a cleanup function directly or a Promise that resolves to one.
+        try {
+          const maybeCleanup = startPresence(client) as unknown;
+          if (maybeCleanup != null) {
+            if (typeof (maybeCleanup as any).then === "function") {
+              const cleanup = await (maybeCleanup as Promise<
+                (() => void) | null | undefined
+              >);
+              if (typeof cleanup === "function") cleanupFunctions.push(cleanup);
+            } else if (typeof maybeCleanup === "function") {
+              cleanupFunctions.push(maybeCleanup as () => void);
+            }
+          }
+          console.log("Presence feature initialized");
+        } catch (innerErr: unknown) {
+          console.warn("Presence setup resolved with an error:", innerErr);
+        }
       }
     } catch (error) {
       console.warn("Failed to load presence feature:", error);
@@ -76,9 +106,25 @@ async function initializeFeatures(client: Client) {
     // Initialize prefix commands (static import)
     try {
       if (typeof setupPrefixCommands === "function") {
-        const cleanup = await setupPrefixCommands(client);
-        if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("Prefix commands initialized");
+        // setupPrefixCommands may return a cleanup function synchronously
+        // or it may be asynchronous and return a Promise that resolves to a cleanup function.
+        // Handle both forms safely to avoid TypeScript conversion errors.
+        try {
+          const maybeCleanup = setupPrefixCommands(client) as unknown;
+          if (maybeCleanup != null) {
+            if (typeof (maybeCleanup as any).then === "function") {
+              const cleanup = await (maybeCleanup as Promise<
+                (() => void) | null | undefined
+              >);
+              if (typeof cleanup === "function") cleanupFunctions.push(cleanup);
+            } else if (typeof maybeCleanup === "function") {
+              cleanupFunctions.push(maybeCleanup as () => void);
+            }
+          }
+          console.log("Prefix commands initialized");
+        } catch (innerErr: unknown) {
+          console.warn("Prefix setup resolved with an error:", innerErr);
+        }
       }
     } catch (error) {
       console.warn("Failed to initialize prefix commands:", error);

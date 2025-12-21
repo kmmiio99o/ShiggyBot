@@ -1,18 +1,160 @@
 import { Client, ActivityType, PresenceStatusData } from "discord.js";
 import { config } from "../config";
+import axios from "axios";
 
 type ActivityEntry = {
   name: string;
   type?: ActivityType | string;
 };
 
-const DEFAULT_ACTIVITIES: ActivityEntry[] = [
-  { name: "welcoming new members", type: ActivityType.Watching },
-  { name: "assigning roles", type: ActivityType.Playing },
-  { name: "role requests", type: ActivityType.Listening },
-  { name: "keeping the server tidy", type: ActivityType.Competing },
-  { name: "powered by TypeScript", type: ActivityType.Playing },
-];
+interface GitHubRepoData {
+  stars: number;
+  lastCommit: string;
+  forks: number;
+  openIssues: number;
+  language: string;
+}
+
+// GitHub API base URL
+const GITHUB_API_BASE = "https://api.github.com";
+const REPO_OWNER = "kmmiio99o";
+const REPO_NAME = "ShiggyCord";
+
+// Cache for GitHub data to avoid rate limiting
+let cachedRepoData: GitHubRepoData | null = null;
+let lastFetchTime: number = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+/**
+ * Normalize unknown errors into strings
+ */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  try {
+    return JSON.stringify(err as any);
+  } catch {
+    return String(err);
+  }
+}
+
+/**
+ * Fetch GitHub repository data
+ */
+async function fetchGitHubRepoData(): Promise<GitHubRepoData | null> {
+  try {
+    // Use cache if still valid
+    if (cachedRepoData && Date.now() - lastFetchTime < CACHE_DURATION) {
+      return cachedRepoData;
+    }
+
+    console.log("🌐 Fetching GitHub repository data...");
+
+    const [repoResponse, commitsResponse] = await Promise.all([
+      axios.get(`${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}`, {
+        headers: {
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "ShiggyCord-Bot",
+        },
+        timeout: 10000,
+      }),
+      axios.get(`${GITHUB_API_BASE}/repos/${REPO_OWNER}/${REPO_NAME}/commits`, {
+        headers: {
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "ShiggyCord-Bot",
+        },
+        params: {
+          per_page: 1,
+        },
+        timeout: 10000,
+      }),
+    ]);
+
+    const repoData = repoResponse.data;
+    const lastCommitDate = commitsResponse.data[0]?.commit?.author?.date;
+
+    const formattedData: GitHubRepoData = {
+      stars: repoData.stargazers_count || 0,
+      lastCommit: lastCommitDate
+        ? new Date(lastCommitDate).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "Unknown",
+      forks: repoData.forks_count || 0,
+      openIssues: repoData.open_issues_count || 0,
+      language: repoData.language || "TypeScript",
+    };
+
+    // Update cache
+    cachedRepoData = formattedData;
+    lastFetchTime = Date.now();
+
+    console.log("✅ GitHub data fetched successfully:", {
+      stars: formattedData.stars,
+      lastCommit: formattedData.lastCommit,
+      forks: formattedData.forks,
+    });
+
+    return formattedData;
+  } catch (error: unknown) {
+    console.error("❌ Failed to fetch GitHub data:", getErrorMessage(error));
+
+    // If we have cached data, return it even if expired
+    if (cachedRepoData) {
+      console.log("⚠️ Returning cached GitHub data");
+      return cachedRepoData;
+    }
+
+    return null;
+  }
+}
+
+/**
+ * Build dynamic activities based on GitHub data
+ */
+async function buildDynamicActivities(): Promise<
+  { name: string; type: ActivityType }[]
+> {
+  const gitHubData = await fetchGitHubRepoData();
+
+  const activities: ActivityEntry[] = [];
+
+  if (gitHubData) {
+    // Add GitHub-related activities
+    activities.push(
+      { name: `⭐ ${gitHubData.stars} stars`, type: ActivityType.Watching },
+      {
+        name: `last commit: ${gitHubData.lastCommit}`,
+        type: ActivityType.Watching,
+      },
+      { name: `${gitHubData.forks} forks`, type: ActivityType.Competing },
+      {
+        name: `${gitHubData.openIssues} open issues`,
+        type: ActivityType.Listening,
+      },
+      { name: `built with ${gitHubData.language}`, type: ActivityType.Playing },
+    );
+  }
+
+  // Add fallback/default activities
+  const defaultActivities: ActivityEntry[] = [
+    { name: "welcoming new members", type: ActivityType.Watching },
+    { name: "assigning roles", type: ActivityType.Playing },
+    { name: "role requests", type: ActivityType.Listening },
+    { name: "keeping the server tidy", type: ActivityType.Competing },
+    { name: "powered by TypeScript", type: ActivityType.Playing },
+    { name: "ShiggyCord v2.0 when???", type: ActivityType.Playing },
+  ];
+
+  // Combine GitHub activities with defaults
+  const allActivities = [...activities, ...defaultActivities];
+
+  return allActivities.map((p) => ({
+    name: p.name,
+    type: resolveActivityType(p.type as any),
+  }));
+}
 
 /**
  * Map friendly type strings to discord.js ActivityType
@@ -45,7 +187,7 @@ function resolveActivityType(input?: string | ActivityType): ActivityType {
  */
 function parseActivitiesEnv(): ActivityEntry[] {
   const raw = process.env.PRESENCE_ACTIVITIES;
-  if (!raw) return DEFAULT_ACTIVITIES;
+  if (!raw) return [];
 
   // Try JSON first
   try {
@@ -87,25 +229,45 @@ function parseActivitiesEnv(): ActivityEntry[] {
     return { name: piece, type: ActivityType.Playing };
   });
 
-  return entries.length > 0 ? entries : DEFAULT_ACTIVITIES;
+  return entries;
 }
 
 /**
  * Build activities array
  */
-function buildActivities(): { name: string; type: ActivityType }[] {
-  const parsed = parseActivitiesEnv();
-  return parsed.map((p) => ({
+async function buildActivities(): Promise<
+  { name: string; type: ActivityType }[]
+> {
+  // First get custom activities from env
+  const parsedEnv = parseActivitiesEnv();
+  const envActivities = parsedEnv.map((p) => ({
     name: p.name,
     type: resolveActivityType(p.type as any),
   }));
+
+  // Get dynamic activities from GitHub
+  const dynamicActivities = await buildDynamicActivities();
+
+  // Combine: custom env activities first, then dynamic ones
+  const allActivities = [...envActivities, ...dynamicActivities];
+
+  // If no activities at all, use fallbacks
+  if (allActivities.length === 0) {
+    return [
+      { name: "ShiggyCord on GitHub", type: ActivityType.Watching },
+      { name: "Open Source Project", type: ActivityType.Playing },
+      { name: "TypeScript Powered", type: ActivityType.Listening },
+    ];
+  }
+
+  return allActivities;
 }
 
 /**
  * Start presence rotation for the provided client.
  * Returns a cleanup function that will stop the interval when called.
  */
-export function startPresence(client: Client): () => void {
+export async function startPresence(client: Client): Promise<() => void> {
   if (!client || !client.user) {
     console.warn(
       "startPresence called but client or client.user is not available yet.",
@@ -129,8 +291,8 @@ export function startPresence(client: Client): () => void {
 
   console.log(`🔄 Setting bot status to: ${status}`);
 
-  const intervalSec = Math.max(15, config.presenceInterval); // Minimum 15 seconds
-  const activities = buildActivities();
+  const intervalSec = Math.max(30, config.presenceInterval); // Increased minimum to 30 seconds for GitHub API
+  let activities = await buildActivities();
 
   if (activities.length === 0) {
     console.warn("No activities found; using default activities.");
@@ -142,26 +304,32 @@ export function startPresence(client: Client): () => void {
     try {
       if (!client.user) return;
 
-      const act = activities[index % activities.length];
-      console.log(
-        `🔄 Updating presence: ${act.name} (${act.type}) [${status}]`,
-      );
+      // Refresh activities every hour to get updated GitHub data
+      if (index % Math.floor(3600 / intervalSec) === 0) {
+        console.log("🔄 Refreshing GitHub data for activities...");
+        activities = await buildActivities();
+      }
 
-      await client.user.setPresence({
+      const act = activities[index % activities.length];
+
+      void client.user.setPresence({
         activities: [{ name: act.name, type: act.type }],
         status,
       });
 
       index++;
-    } catch (err) {
-      console.error("❌ Failed to update presence:", err);
+    } catch (err: unknown) {
+      console.error("❌ Failed to update presence:", getErrorMessage(err));
     }
   };
 
-  // Set immediately
-  applyActivity();
+  // Set immediately (kick off but don't await to avoid blocking startup)
+  void applyActivity();
 
-  const timer = setInterval(applyActivity, intervalSec * 1000);
+  // Wrap the async updater so setInterval receives a sync callback
+  const timer = setInterval(() => {
+    void applyActivity();
+  }, intervalSec * 1000);
 
   // Return cleanup
   return () => {
@@ -177,7 +345,7 @@ export const setupPresence = startPresence;
 /**
  * Setup function for event system
  */
-export function setup(client: Client): () => void {
+export function setup(client: Client): Promise<() => void> {
   return startPresence(client);
 }
 
