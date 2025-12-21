@@ -106,7 +106,12 @@ async function handlePrefixCommand(
     contentWithoutPrefix.length > 0 ? contentWithoutPrefix.split(/\s+/) : [];
   const commandName = args.shift();
 
-  if (!commandName) return; // No command name found after prefix
+  if (!commandName) {
+    await handleNonCommandMessage(message, contentWithoutPrefix).catch(
+      () => {},
+    );
+    return;
+  }
 
   try {
     // Delegate to prefix command handler
@@ -114,24 +119,9 @@ async function handlePrefixCommand(
     const command = commandRegistry.getPrefixCommand(commandName);
 
     if (!command) {
-      const unknownCommandEmbed = new EmbedBuilder()
-        .setTitle("❌ Unknown Command")
-        .setColor(Colors.Red)
-        .setDescription(
-          `The command \`${config.prefix}${commandName}\` was not found.`,
-        )
-        .addFields({
-          name: "🔍 Did you mean?",
-          value: `Try using \`${config.prefix}help\` to see all available commands.`,
-          inline: false,
-        })
-        .setFooter({
-          text: `Requested by ${message.author.tag}`,
-          iconURL: message.author.displayAvatarURL(),
-        })
-        .setTimestamp();
-
-      await message.reply({ embeds: [unknownCommandEmbed] }).catch(() => {});
+      await handleNonCommandMessage(message, contentWithoutPrefix).catch(
+        () => {},
+      );
       return;
     }
 

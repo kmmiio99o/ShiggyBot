@@ -74,13 +74,10 @@ export async function handleSnoteCommand(message: Message): Promise<void> {
           "Use `snote <key>` (or `note <key>`) to view a note. Example: `snote vc`",
         );
 
-      const lines = Object.keys(notes).map((k) => `\`${k}\``);
-
-      // Join lines into embed fields (chunk if needed)
-      const chunk = lines.join("\n");
+      const names = Object.keys(notes).join(", ");
       embed.addFields({
         name: `Notes (${Object.keys(notes).length})`,
-        value: chunk,
+        value: `**${names}**`,
         inline: false,
       });
 

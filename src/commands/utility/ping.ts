@@ -1,4 +1,4 @@
-import { Message, EmbedBuilder, Colors } from "discord.js";
+import { Message, EmbedBuilder, type ColorResolvable } from "discord.js";
 import { PrefixCommand } from "../types";
 
 const pingCommand: PrefixCommand = {
@@ -8,7 +8,7 @@ const pingCommand: PrefixCommand = {
     // Initial embed to show we're measuring
     const initialEmbed = new EmbedBuilder()
       .setTitle("🏓 Measuring Latency...")
-      .setColor(Colors.Yellow)
+      .setColor("#FFFF00" as ColorResolvable)
       .setDescription("Please wait while I calculate the response times...")
       .setFooter({
         text: `Requested by ${message.author.tag}`,
@@ -33,7 +33,7 @@ const pingCommand: PrefixCommand = {
     }
 
     // Determine status color based on latency
-    let statusColor = Colors.Green;
+    let statusColor: ColorResolvable = "#00FF00";
     let statusEmoji = "✅";
     let statusText = "Excellent";
 
@@ -41,19 +41,19 @@ const pingCommand: PrefixCommand = {
     const effectiveLatency = apiLatency > 0 ? apiLatency : latency;
 
     if (effectiveLatency > 200) {
-      statusColor = Colors.Yellow;
+      statusColor = "#FFFF00";
       statusEmoji = "⚠️";
       statusText = "Moderate";
     }
 
     if (effectiveLatency > 500) {
-      statusColor = Colors.Red;
+      statusColor = "#FF0000";
       statusEmoji = "🔴";
       statusText = "High";
     }
 
     if (effectiveLatency > 1000) {
-      statusColor = Colors.DarkRed;
+      statusColor = "#8B0000";
       statusEmoji = "🚨";
       statusText = "Critical";
     }

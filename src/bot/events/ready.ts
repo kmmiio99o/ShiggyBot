@@ -76,7 +76,7 @@ async function initializeFeatures(client: Client) {
     // Initialize prefix commands (static import)
     try {
       if (typeof setupPrefixCommands === "function") {
-        const cleanup = setupPrefixCommands(client);
+        const cleanup = await setupPrefixCommands(client);
         if (cleanup) cleanupFunctions.push(cleanup);
         console.log("Prefix commands initialized");
       }

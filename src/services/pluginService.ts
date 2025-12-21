@@ -124,9 +124,9 @@ function calculateSimilarity(text: string, query: string): number {
   const similarity = 1 - distance / maxLength;
 
   // Require higher similarity for fuzzy matches
-  if (similarity < 0.6) return 0; // Reject poor matches
+  if (similarity < 0.6) return 0;
 
-  return similarity * 5.0; // Scale down fuzzy matches (max 5.0)
+  return similarity * 5.0;
 }
 
 function levenshteinDistance(a: string, b: string): number {
@@ -357,7 +357,7 @@ export async function handlePluginSearch(
   }
 
   // Search and score plugins
-  const scoreThreshold = 6.0; // Higher threshold for better quality results
+  const scoreThreshold = 6.0;
   const searchResults = allPlugins
     .map((plugin) => ({
       plugin,
@@ -408,14 +408,14 @@ export async function handlePluginButton(
 
   if (customId.startsWith("plg_")) {
     await interaction.deferReply({ ephemeral: true });
-    const pluginHash = customId.substring(4); // Remove "plg_" prefix
+    const pluginHash = customId.substring(4);
 
     const allPlugins = await fetchPluginData();
     const plugin = getPluginByHash(allPlugins, pluginHash);
 
     if (plugin && plugin.installUrl) {
       await interaction.editReply({
-        content: `Here's the install link for **${plugin.name}**:\n\`\`\`${plugin.installUrl}\`\`\`\n**Note:** If the link doesn't work directly, you might need to copy and paste it into your client's plugin installer.`,
+        content: `Here's the install link for **${plugin.name}**:\n${plugin.installUrl}`,
       });
     } else {
       await interaction.editReply({
