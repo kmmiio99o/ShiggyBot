@@ -2,7 +2,6 @@ import { Client } from "discord.js";
 import { config } from "../../config";
 import { logger } from "../../utils/webhookLogger";
 import { setupPrefixCommands } from "../../commands/prefix";
-import { setupSlashCommands } from "../../commands/slash";
 
 let isInitialized = false;
 const cleanupFunctions: Array<() => void> = [];
@@ -15,7 +14,7 @@ export function setupReadyHandler(client: Client): () => void {
     if (isInitialized) return;
     isInitialized = true;
 
-    console.log(`✅ Logged in as ${client.user?.tag} (${client.user?.id})`);
+    console.log(`Logged in as ${client.user?.tag} (${client.user?.id})`);
 
     try {
       // Initialize all bot features
@@ -27,7 +26,7 @@ export function setupReadyHandler(client: Client): () => void {
         user: client.user?.tag,
       });
     } catch (error) {
-      console.error("❌ Error during initialization:", error);
+      console.error("Error during initialization:", error);
       await logger.error(error as Error, { type: "initialization" });
     }
   };
@@ -44,7 +43,7 @@ export function setupReadyHandler(client: Client): () => void {
  */
 async function initializeFeatures(client: Client) {
   try {
-    console.log("🚀 Initializing bot features...");
+    console.log("Initializing bot features...");
 
     // Initialize autorole feature
     try {
@@ -54,10 +53,10 @@ async function initializeFeatures(client: Client) {
       if (typeof setupAutoRole === "function") {
         const cleanup = setupAutoRole(client);
         if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("✅ Auto-role feature initialized");
+        console.log("Auto-role feature initialized");
       }
     } catch (error) {
-      console.warn("⚠️ Failed to load autorole feature:", error);
+      console.warn("Failed to load autorole feature:", error);
     }
 
     // Initialize presence feature
@@ -68,10 +67,10 @@ async function initializeFeatures(client: Client) {
       if (typeof startPresence === "function") {
         const cleanup = startPresence(client);
         if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("✅ Presence feature initialized");
+        console.log("Presence feature initialized");
       }
     } catch (error) {
-      console.warn("⚠️ Failed to load presence feature:", error);
+      console.warn("Failed to load presence feature:", error);
     }
 
     // Initialize prefix commands (static import)
@@ -79,24 +78,14 @@ async function initializeFeatures(client: Client) {
       if (typeof setupPrefixCommands === "function") {
         const cleanup = setupPrefixCommands(client);
         if (cleanup) cleanupFunctions.push(cleanup);
-        console.log("✅ Prefix commands initialized");
+        console.log("Prefix commands initialized");
       }
     } catch (error) {
-      console.warn("⚠️ Failed to initialize prefix commands:", error);
-    }
-
-    // Initialize slash commands (static import)
-    try {
-      if (typeof setupSlashCommands === "function") {
-        await setupSlashCommands(client);
-        console.log("✅ Slash commands initialized");
-      }
-    } catch (error) {
-      console.warn("⚠️ Failed to initialize slash commands:", error);
+      console.warn("Failed to initialize prefix commands:", error);
     }
   } catch (error) {
     console.error(
-      "❌ A critical error occurred during feature initialization:",
+      "A critical error occurred during feature initialization:",
       error,
     );
   }
