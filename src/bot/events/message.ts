@@ -1,4 +1,4 @@
-import { Client, Message } from "discord.js";
+import { Client, Message, PermissionResolvable, APIEmbed } from "discord.js";
 import { config } from "../../config";
 import { logger } from "../../utils/webhookLogger";
 
@@ -35,68 +35,115 @@ export function setupMessageHandler(client: Client): () => void {
  * Processes a message through all registered handlers
  */
 async function processMessage(message: Message): Promise<void> {
-  const content = message.content.toLowerCase();
+  const lowercasedContent = message.content.toLowerCase();
+
+  // Check for plugin search using [[plugin name]] format first, as it's not prefix-based
+  const pluginBracketMatch = message.content.match(/^\[\[(.*?)\]\]$/);
+  if (pluginBracketMatch) {
+    const pluginName = pluginBracketMatch[1].trim();
+    if (pluginName) {
+      await handlePluginSearch(message, [pluginName]);
+    }
+    return;
+  }
 
   // Skip if message doesn't start with prefix
-  if (!content.startsWith(config.prefix.toLowerCase())) {
-    // Handle non-command messages (auto-previews, etc.)
-    await handleNonCommandMessage(message);
+  if (!lowercasedContent.startsWith(config.prefix.toLowerCase())) {
+    // Handle other non-command messages (auto-previews, etc.)
+    await handleNonCommandMessage(message, lowercasedContent);
     return;
   }
 
   // Handle prefix commands
-  await handlePrefixCommand(message);
+  await handlePrefixCommand(message, lowercasedContent);
 }
 
 /**
  * Handles messages that aren't prefix commands
  */
-async function handleNonCommandMessage(message: Message): Promise<void> {
-  const content = message.content;
-
+async function handleNonCommandMessage(
+  message: Message,
+  lowercasedContent: string,
+): Promise<void> {
   // Check for special non-prefix commands
-  if (content.toLowerCase().startsWith("snote")) {
+  if (lowercasedContent.startsWith("snote")) {
     await handleSnoteCommand(message);
     return;
   }
 
-  // Check for plugin search
-  if (
-    content.toLowerCase().startsWith("splug ") ||
-    content.match(/^\[\[(.*?)]]$/)
-  ) {
-    await handlePluginSearch(message);
+  // Check for plugin search using splug prefix
+  if (lowercasedContent.startsWith("splug ")) {
+    const args = message.content.slice("splug ".length).trim().split(/\s+/);
+    await handlePluginSearch(message, args);
     return;
   }
 
   // Auto-preview features (run in background, don't block)
-  processAutoPreviews(message).catch(() => {});
+  processAutoPreviews(message).catch((err) => {
+    console.error("❌ Error in auto previews:", err);
+  });
 }
 
 /**
  * Handles prefix commands
  */
-async function handlePrefixCommand(message: Message): Promise<void> {
-  const content = message.content.slice(config.prefix.length).trim();
-  const args = content.split(/\s+/);
-  const commandName = args.shift()?.toLowerCase();
+async function handlePrefixCommand(
+  message: Message,
+  lowercasedContent: string,
+): Promise<void> {
+  // Extract command name and arguments after the prefix
+  const contentWithoutPrefix = lowercasedContent
+    .slice(config.prefix.length)
+    .trim();
+  const args =
+    contentWithoutPrefix.length > 0 ? contentWithoutPrefix.split(/\s+/) : [];
+  const commandName = args.shift();
 
-  if (!commandName) return;
+  if (!commandName) return; // No command name found after prefix
 
   try {
     // Delegate to prefix command handler
-    const prefixModule = await import("../../commands/prefix");
-    await prefixModule.handlePrefixCommand(message, commandName, args);
+    const { commandRegistry } = await import("../../commands/index");
+    const command = commandRegistry.getPrefixCommand(commandName);
+
+    if (!command) {
+      await message
+        .reply(`❌ Unknown command: \`${config.prefix}${commandName}\``)
+        .catch(() => {});
+      return;
+    }
+
+    // Basic permission check (can be expanded with more robust role management)
+    if (command.permissions && message.member) {
+      const missingPermissions: PermissionResolvable[] =
+        command.permissions.filter(
+          (perm: PermissionResolvable) =>
+            !message.member!.permissions.has(perm),
+        );
+
+      if (missingPermissions.length > 0) {
+        await message
+          .reply(
+            `❌ You are missing the following permissions to use this command: \`${missingPermissions.join(", ")}\``,
+          )
+          .catch(() => {});
+        return;
+      }
+    }
+
+    await command.execute(message, args);
   } catch (error) {
     console.error(`❌ Error handling prefix command ${commandName}:`, error);
 
-    const embed = {
+    // Send a user-facing embed notifying about the error
+    const embed: APIEmbed = {
       title: "❌ Command Error",
       description: "An error occurred while executing this command.",
       color: 0xff5555,
       timestamp: new Date().toISOString(),
     };
 
+    // Use instance method `message.reply` (not the class) to respond
     await message.reply({ embeds: [embed] }).catch(() => {});
   }
 }
@@ -110,18 +157,35 @@ async function handleSnoteCommand(message: Message): Promise<void> {
     await handleSnoteCommand(message);
   } catch (error) {
     console.error("❌ Error handling snote command:", error);
+    await logger.error(error as Error, {
+      type: "snoteCommand",
+      userId: message.author.id,
+      guildId: message.guild?.id,
+      channelId: message.channel.id,
+    });
   }
 }
 
 /**
  * Handles plugin search command
  */
-async function handlePluginSearch(message: Message): Promise<void> {
+async function handlePluginSearch(
+  message: Message,
+  args: string[],
+): Promise<void> {
   try {
-    const { handlePluginSearch } = await import("../../services/pluginService");
-    await handlePluginSearch(message);
+    const { handlePluginSearch: serviceHandlePluginSearch } = await import(
+      "../../services/pluginService"
+    );
+    await serviceHandlePluginSearch(message, args);
   } catch (error) {
     console.error("❌ Error handling plugin search:", error);
+    await logger.error(error as Error, {
+      type: "pluginSearch",
+      userId: message.author.id,
+      guildId: message.guild?.id,
+      channelId: message.channel.id,
+    });
   }
 }
 
@@ -141,5 +205,11 @@ async function processAutoPreviews(message: Message): Promise<void> {
     await autoPreviewCommitLinks(message);
   } catch (error) {
     console.error("❌ Error processing auto-previews:", error);
+    await logger.error(error as Error, {
+      type: "autoPreviews",
+      userId: message.author.id,
+      guildId: message.guild?.id,
+      channelId: message.channel.id,
+    });
   }
 }

@@ -1,19 +1,24 @@
 import { Client, Interaction } from "discord.js";
 import { logger } from "../../utils/webhookLogger";
+import { handlePluginButton } from "../../services/pluginService";
 
 /**
  * Handles all interactionCreate events
  */
 export function setupInteractionHandler(client: Client): () => void {
+  const slashCommandHandler = new SlashCommandHandler(client);
+
   const handleInteraction = async (interaction: Interaction) => {
     try {
-      // Handle different types of interactions
       if (interaction.isChatInputCommand()) {
-        await handleSlashCommand(interaction);
+        await slashCommandHandler.handleCommand(interaction);
       } else if (interaction.isButton()) {
         await handleButtonInteraction(interaction);
       } else if (interaction.isAutocomplete()) {
-        await handleAutocomplete(interaction);
+        await slashCommandHandler.handleAutocomplete(
+          interaction,
+          interaction.commandName,
+        );
       }
     } catch (error) {
       console.error("❌ Error in interaction handler:", error);
@@ -25,7 +30,6 @@ export function setupInteractionHandler(client: Client): () => void {
         interactionId: interaction.id,
       });
 
-      // Try to reply with error if possible
       if (interaction.isRepliable() && !interaction.replied) {
         try {
           await interaction.reply({
@@ -46,52 +50,25 @@ export function setupInteractionHandler(client: Client): () => void {
   };
 }
 
-/**
- * Handles slash commands
- */
-async function handleSlashCommand(interaction: any): Promise<void> {
-  try {
-    const { handleSlashCommand } = await import("../../commands/slash");
-    await handleSlashCommand(interaction);
-  } catch (error) {
-    console.error("❌ Error handling slash command:", error);
-    throw error;
-  }
-}
-
-/**
- * Handles button interactions
- */
 async function handleButtonInteraction(interaction: any): Promise<void> {
   const customId = interaction.customId;
 
-  // Handle plugin buttons
   if (customId.startsWith("plg_")) {
     try {
-      const { handlePluginButton } = await import(
-        "../../services/pluginService"
-      );
       await handlePluginButton(interaction);
     } catch (error) {
       console.error("❌ Error handling plugin button:", error);
-      throw error;
+      if (interaction.isRepliable() && !interaction.replied) {
+        try {
+          await interaction.reply({
+            content: "❌ An error occurred while processing this button.",
+            ephemeral: true,
+          });
+        } catch (replyError) {
+          // Ignore reply errors
+        }
+      }
     }
     return;
-  }
-
-  // Add more button handlers as needed
-}
-
-/**
- * Handles autocomplete interactions
- */
-async function handleAutocomplete(interaction: any): Promise<void> {
-  const commandName = interaction.commandName;
-
-  try {
-    const { handleAutocomplete } = await import("../../commands/slash");
-    await handleAutocomplete(interaction, commandName);
-  } catch (error) {
-    console.error("❌ Error handling autocomplete:", error);
   }
 }
