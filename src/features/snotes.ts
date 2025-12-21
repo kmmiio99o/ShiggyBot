@@ -60,8 +60,7 @@ export const notes: { [key: string]: Snote } = {
  * command (e.g. `snote`) and the second token (if present) to be the note key.
  */
 export async function handleSnoteCommand(message: Message): Promise<void> {
-  // Extract tokens from message content (handles prefix or plain invocation)
-  const tokens = message.content.trim().split(/\s+/).slice(1); // remove command token
+  const tokens = message.content.trim().split(/\s+/).slice(1);
   const key = tokens[0]?.toLowerCase();
 
   try {
@@ -71,7 +70,7 @@ export async function handleSnoteCommand(message: Message): Promise<void> {
         .setTitle("Snotes — Available Notes")
         .setColor(0x6f42c1)
         .setDescription(
-          "Use `snote <key>` (or `note <key>`) to view a note. Example: `snote vc`",
+          "Use `snote <key>` to view a note. Example: `snote vc`",
         );
 
       const names = Object.keys(notes).join(", ");

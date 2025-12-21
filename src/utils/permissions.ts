@@ -71,7 +71,7 @@ export const PermissionSets = {
     PermissionFlagsBits.ManageGuild,
     PermissionFlagsBits.ManageChannels,
     PermissionFlagsBits.ManageRoles,
-    PermissionFlagsBits.ManageEmojisAndStickers,
+    PermissionFlagsBits.ManageGuildExpressions,
   ],
   utility: [
     PermissionFlagsBits.SendMessages,

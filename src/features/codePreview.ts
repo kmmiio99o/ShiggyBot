@@ -636,6 +636,26 @@ async function processCodeUrl(
     return;
   }
 
+  // If this looks like a commit URL (e.g. contains '/commit/<sha>' or '/commits/<sha>'), skip handling here.
+  // Commit previews are handled by commitPreview.ts to avoid duplicate or conflicting embeds.
+  try {
+    const isCommitPath =
+      /(?:^|\/)commit\/[0-9a-fA-F]{7,40}(?:\/|$)/i.test(pathSegment) ||
+      /\/commits?\/[0-9a-fA-F]{7,40}(?:[?#]|$)/i.test(fullUrl);
+    if (isCommitPath) {
+      console.log(
+        `[CodePreview] Skipping commit URL so commitPreview can handle it: ${fullUrl}`,
+      );
+      return;
+    }
+  } catch (e) {
+    // If any unexpected error occurs while checking, fall back to normal behavior.
+    console.warn(
+      "[CodePreview] Commit detection failed, continuing with code preview:",
+      e,
+    );
+  }
+
   const rawUrl = buildRawUrl(host, owner, repo, finalRef, filePath);
 
   if (!rawUrl) {
