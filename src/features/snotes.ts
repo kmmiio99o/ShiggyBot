@@ -46,6 +46,11 @@ export const notes: { [key: string]: Snote } = {
     content:
       "ShiggyCord tried to fetch bundle but couldn't. Try using vpn and see if it works. But if Shiggy still load successfully, ignore it.",
   },
+  stuck: {
+    title: "ShiggyCord stuck on loading discord screen",
+    content:
+      "Disable bundle injection in Xposed Recovery Menu (shake your phone). If it fixes the issue, enable it again.",
+  },
 };
 
 /**
