@@ -11,7 +11,7 @@ import { PrefixCommand } from "../types";
 const banCommand: PrefixCommand = {
   name: "ban",
   description: "Ban a server member immediately.",
-  usage: "<user> [deleteDays 0-7] [reason...]",
+  usage: '<user> [deleteTime] [reason...]  (examples: "7d", "30min", "0")',
   permissions: [PermissionFlagsBits.BanMembers],
   async execute(message: Message, args: string[]) {
     const createErrorEmbed = (title: string, description: string) => {
@@ -102,8 +102,8 @@ const banCommand: PrefixCommand = {
             "User Not Found",
             `❌ Could not find the specified user. Please mention the user or provide their ID.
 
-**Usage:** \`${process.env.PREFIX || "S"}ban @user [deleteDays 0-7] [reason...]\`
-**Example:** \`${process.env.PREFIX || "S"}ban @user 2 Spamming chat\``,
+    **Usage:** \`${process.env.PREFIX || "S"}ban @user [deleteTime e.g. 7d, 30min, 0] [reason...]\`
+    **Example:** \`${process.env.PREFIX || "S"}ban @user 7d Spamming chat\``,
           ),
         ],
       });
@@ -169,8 +169,10 @@ const banCommand: PrefixCommand = {
       return;
     }
 
-    // Parse delete days (0-7) and reason
+    // Parse delete time
     let deleteDays = 0;
+    let deleteMessageSeconds = 0;
+    let displayDeleteTime = "0";
     let reasonParts: string[] = [];
 
     // args[] may start with the user mention/id; remove it for parsing
@@ -178,22 +180,70 @@ const banCommand: PrefixCommand = {
       message.mentions.members && message.mentions.members.size > 0 ? 1 : 1;
     const remaining = args.slice(consumed);
 
-    // handle if the first remaining token is numeric (deleteDays)
-    if (remaining.length > 0 && /^\d+$/.test(remaining[0])) {
-      const parsed = Math.max(0, Math.min(7, Number(remaining[0])));
-      deleteDays = parsed;
-      reasonParts = remaining.slice(1);
+    // Attempt to parse a time token from the first remaining argument
+    if (remaining.length > 0) {
+      const token = remaining[0].toLowerCase();
+      const match = token.match(
+        /^(\d+)(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?$/,
+      );
+      if (match) {
+        const num = Number(match[1]);
+        const unit = match[2] || "d";
+        let seconds = 0;
+
+        if (["s", "sec", "secs"].includes(unit)) {
+          seconds = num;
+        } else if (["m", "min", "mins"].includes(unit)) {
+          seconds = num * 60;
+        } else if (["h", "hr", "hrs"].includes(unit)) {
+          seconds = num * 60 * 60;
+        } else {
+          // days
+          seconds = num * 24 * 60 * 60;
+        }
+
+        // Clamp to a maximum of 7 days
+        const maxSeconds = 7 * 24 * 60 * 60;
+        if (seconds > maxSeconds) seconds = maxSeconds;
+
+        deleteMessageSeconds = seconds;
+        deleteDays = Math.floor(deleteMessageSeconds / (24 * 60 * 60));
+
+        // Human-friendly display
+        if (deleteMessageSeconds === 0) {
+          displayDeleteTime = "0";
+        } else if (deleteMessageSeconds % (24 * 60 * 60) === 0) {
+          const d = deleteMessageSeconds / (24 * 60 * 60);
+          displayDeleteTime = `${d} day(s)`;
+        } else if (deleteMessageSeconds % 3600 === 0) {
+          const h = deleteMessageSeconds / 3600;
+          displayDeleteTime = `${h} hour(s)`;
+        } else if (deleteMessageSeconds % 60 === 0) {
+          const m = deleteMessageSeconds / 60;
+          displayDeleteTime = `${m} minute(s)`;
+        } else {
+          displayDeleteTime = `${deleteMessageSeconds} second(s)`;
+        }
+
+        reasonParts = remaining.slice(1);
+      } else {
+        // First token isn't a time specifier -> treat everything as the reason
+        reasonParts = remaining.slice(0);
+        deleteMessageSeconds = 0;
+        displayDeleteTime = "0";
+      }
     } else {
-      reasonParts = remaining.slice(0);
+      reasonParts = [];
+      deleteMessageSeconds = 0;
+      displayDeleteTime = "0";
     }
 
     const reason =
       reasonParts.join(" ").trim() || `Banned by ${message.author.tag}`;
-
     // Perform the ban
     try {
       await targetMember.ban({
-        deleteMessageDays: deleteDays,
+        deleteMessageSeconds: deleteMessageSeconds,
         reason: `${reason} — banned by ${message.author.tag}`,
       });
 
@@ -211,7 +261,7 @@ const banCommand: PrefixCommand = {
           },
           {
             name: "🗑️ Deleted Messages",
-            value: `${deleteDays} day(s)`,
+            value: displayDeleteTime,
             inline: true,
           },
           {

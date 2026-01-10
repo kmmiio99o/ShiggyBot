@@ -8,10 +8,6 @@ export interface Snote {
   content: string | string[];
 }
 
-/**
- * Hardcoded notes.
- * You can later move this object to a JSON file and load it dynamically if desired.
- */
 export const notes: { [key: string]: Snote } = {
   vc: {
     title: "No one can hear me",

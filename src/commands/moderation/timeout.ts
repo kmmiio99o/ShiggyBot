@@ -74,30 +74,67 @@ const timeoutCommand: PrefixCommand = {
       return;
     }
 
-    if (!args[0] || !args[1]) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "Usage Error",
-            `❌ Please provide both a user and duration.
+    if (!message.reference) {
+      // Not a reply: require both user and duration
+      if (!args[0] || !args[1]) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "Usage Error",
+              `❌ Please provide both a user and duration.
 
 **Usage:** \`${process.env.PREFIX || "S"}timeout @user <duration> [reason]\`
 **Duration Examples:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
 **Maximum:** 28 days
 **Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
-          ),
-        ],
-      });
-      return;
+            ),
+          ],
+        });
+        return;
+      }
+    } else {
+      // Is a reply: require at least a duration (args[0])
+      if (!args[0]) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "Usage Error",
+              `❌ Please provide a duration when using this command as a reply.
+
+**Usage:** \`${process.env.PREFIX || "S"}timeout <duration> [reason]\` (reply to the user)
+**Duration Examples:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
+**Maximum:** 28 days
+**Example:** \`${process.env.PREFIX || "S"}timeout 30m Spamming\` (reply to the user)`,
+            ),
+          ],
+        });
+        return;
+      }
     }
 
     // Resolve target member (mention or ID)
     let target: GuildMember | null = null;
+    let durationArgIndex = 1;
     if (message.mentions.members && message.mentions.members.size > 0) {
       target = message.mentions.members.first() || null;
+      durationArgIndex = 1;
+    } else if (message.reference && message.reference.messageId) {
+      // If the command was used as a reply, fetch the replied-to message and use its author
+      const referenced = await message.channel.messages
+        .fetch(message.reference.messageId)
+        .catch(() => null);
+      if (referenced) {
+        target = await message.guild.members
+          .fetch(referenced.author.id)
+          .catch(() => null);
+        durationArgIndex = 0;
+      }
     } else {
-      const id = args[0].replace(/[<@!>]/g, "");
-      target = await message.guild.members.fetch(id).catch(() => null);
+      const id = args[0] ? args[0].replace(/[<@!>]/g, "") : "";
+      target = id
+        ? await message.guild.members.fetch(id).catch(() => null)
+        : null;
+      durationArgIndex = 1;
     }
 
     if (!target) {
@@ -177,8 +214,26 @@ const timeoutCommand: PrefixCommand = {
       return;
     }
 
-    // Parse duration token
-    const durationToken = args[1];
+    // Parse duration token (duration may be at args[1] normally, or args[0] if replying)
+    const durationToken = args[durationArgIndex];
+    if (!durationToken) {
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Duration Format",
+            `❌ Invalid duration format.
+
+**Valid Formats:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
+• \`s\` = seconds
+• \`m\` = minutes
+• \`h\` = hours
+• \`d\` = days
+**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
+          ),
+        ],
+      });
+      return;
+    }
     const matched = durationToken.match(/^(\d+)(s|m|h|d)$/i);
     if (!matched) {
       await message.reply({
@@ -236,7 +291,10 @@ const timeoutCommand: PrefixCommand = {
     const appliedMs = Math.min(ms, MAX_TIMEOUT_MS);
 
     const reason =
-      args.slice(2).join(" ").trim() || `Timed out by ${message.author.tag}`;
+      args
+        .slice(durationArgIndex + 1)
+        .join(" ")
+        .trim() || `Timed out by ${message.author.tag}`;
 
     try {
       // Use GuildMember.timeout (discord.js v14) — duration in ms
