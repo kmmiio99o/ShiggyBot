@@ -131,10 +131,10 @@ export class CommandRegistry {
 
     const commandsBasePath = path.join(__dirname);
 
-    // Candidate roots to scan for prefix commands (both legacy layouts and grouped layouts)
+    // Candidate roots to scan for prefix commands
     const prefixCandidateDirs = [
-      path.join(commandsBasePath, "prefix"), // commands/prefix/*
-      path.join(commandsBasePath, "moderation"), // commands/moderation/*
+      path.join(commandsBasePath, "prefix"),
+      path.join(commandsBasePath, "moderation"),
       path.join(commandsBasePath, "search"),
       path.join(commandsBasePath, "utility"),
       // Also accept a nested commands/prefix or commands/moderation if someone put them there

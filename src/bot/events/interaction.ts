@@ -129,6 +129,4 @@ async function handleButtonInteraction(
     }
     return;
   }
-
-  // If more button types are used in the future, handle them here.
 }

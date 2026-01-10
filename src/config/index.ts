@@ -51,14 +51,14 @@ export const config = {
     }
 
     // Log successful configuration
-    console.log("✅ Configuration loaded successfully");
-    console.log(`   Prefix: ${this.prefix}`);
-    console.log(`   Client ID: ${this.clientId}`);
-    console.log(`   Welcome Role: ${this.welcomeRoleId}`);
+    console.log("Configuration loaded successfully");
+    console.log(`Prefix: ${this.prefix}`);
+    console.log(`Client ID: ${this.clientId}`);
+    console.log(`Welcome Role: ${this.welcomeRoleId}`);
     console.log(
       `   Presence: ${this.presenceStatus} (${this.presenceInterval}s)`,
     );
-    console.log(`   Dashboard Port: ${this.dashboardPort}`);
+    console.log(`Dashboard Port: ${this.dashboardPort}`);
 
     return true;
   },

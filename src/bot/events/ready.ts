@@ -106,9 +106,6 @@ async function initializeFeatures(client: Client) {
     // Initialize prefix commands (static import)
     try {
       if (typeof setupPrefixCommands === "function") {
-        // setupPrefixCommands may return a cleanup function synchronously
-        // or it may be asynchronous and return a Promise that resolves to a cleanup function.
-        // Handle both forms safely to avoid TypeScript conversion errors.
         try {
           const maybeCleanup = setupPrefixCommands(client) as unknown;
           if (maybeCleanup != null) {

@@ -19,7 +19,6 @@ const GIT_HOSTS: Record<string, GitHostConfig> = {
     commitUrl: (owner, repo, sha) =>
       `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`,
   },
-  // Add more hosts as needed
 };
 
 /**
@@ -42,7 +41,7 @@ interface CommitData {
   files?: Array<{
     filename: string;
     status: string;
-    patch?: string; // To hold the diff content
+    patch?: string;
   }>;
   url: string;
 }

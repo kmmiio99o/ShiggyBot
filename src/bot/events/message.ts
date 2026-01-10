@@ -125,7 +125,7 @@ async function handlePrefixCommand(
       return;
     }
 
-    // Basic permission check (can be expanded with more robust role management)
+    // Basic permission check
     if (command.permissions && message.member) {
       const missingPermissions: PermissionResolvable[] =
         command.permissions.filter(
@@ -211,9 +211,8 @@ async function handlePluginSearch(
   args: string[],
 ): Promise<void> {
   try {
-    const { handlePluginSearch: serviceHandlePluginSearch } = await import(
-      "../../services/pluginService"
-    );
+    const { handlePluginSearch: serviceHandlePluginSearch } =
+      await import("../../services/pluginService");
     await serviceHandlePluginSearch(message, args);
   } catch (error) {
     console.error("❌ Error handling plugin search:", error);
@@ -236,9 +235,8 @@ async function processAutoPreviews(message: Message): Promise<void> {
     await autoPreviewCodeLinks(message);
 
     // Commit previews
-    const { autoPreviewCommitLinks } = await import(
-      "../../features/commitPreview"
-    );
+    const { autoPreviewCommitLinks } =
+      await import("../../features/commitPreview");
     await autoPreviewCommitLinks(message);
   } catch (error) {
     console.error("❌ Error processing auto-previews:", error);

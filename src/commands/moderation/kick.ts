@@ -158,7 +158,7 @@ const kickCommand: PrefixCommand = {
       return;
     }
 
-    // Bot must be able to kick (role hierarchy)
+    // Bot must be able to kick
     if (botHighest <= targetHighest) {
       await message.reply({
         embeds: [
