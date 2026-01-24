@@ -64,6 +64,28 @@ export async function handleSnoteCommand(message: Message): Promise<void> {
   const tokens = message.content.trim().split(/\s+/).slice(1);
   const key = tokens[0]?.toLowerCase();
 
+  // Helper to reply either to the referenced message (when command was used as a reply)
+  // or fallback to replying to the command message itself.
+  async function replyToReferenceOrMessage(
+    payload: string | { embeds: EmbedBuilder[] },
+  ) {
+    if (message.reference && message.reference.messageId) {
+      try {
+        const referenced = await message.channel.messages
+          .fetch(message.reference.messageId)
+          .catch(() => null);
+        if (referenced) {
+          // Try replying to the referenced message for context
+          await referenced.reply(payload).catch(() => {});
+          return;
+        }
+      } catch {
+        // ignore and fallback to message.reply
+      }
+    }
+    await message.reply(payload).catch(() => {});
+  }
+
   try {
     if (!key || key === "list" || key === "all") {
       // List available notes
@@ -81,17 +103,15 @@ export async function handleSnoteCommand(message: Message): Promise<void> {
         inline: false,
       });
 
-      await message.reply({ embeds: [embed] }).catch(() => {});
+      await replyToReferenceOrMessage({ embeds: [embed] });
       return;
     }
 
     const note = notes[key];
     if (!note) {
-      await message
-        .reply(
-          `❌ Unknown note: \`${key}\`. Use \`snote\` to list available notes.`,
-        )
-        .catch(() => {});
+      await replyToReferenceOrMessage(
+        `❌ Unknown note: \`${key}\`. Use \`snote\` to list available notes.`,
+      );
       return;
     }
 
@@ -105,13 +125,13 @@ export async function handleSnoteCommand(message: Message): Promise<void> {
       embed.setDescription(note.content);
     }
 
-    await message.reply({ embeds: [embed] }).catch(() => {});
+    await replyToReferenceOrMessage({ embeds: [embed] });
   } catch (error) {
     console.error("Failed to handle snote command:", error);
     try {
-      await message
-        .reply("❌ An error occurred while processing the note request.")
-        .catch(() => {});
+      await replyToReferenceOrMessage(
+        "❌ An error occurred while processing the note request.",
+      );
     } catch {
       // ignore
     }
