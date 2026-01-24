@@ -50,7 +50,7 @@ const banCommand: PrefixCommand = {
       return;
     }
 
-    // Permission checks for executor
+    // Permission checks
     if (!executor.permissions.has(PermissionFlagsBits.BanMembers)) {
       await message.reply({
         embeds: [
@@ -76,34 +76,67 @@ const banCommand: PrefixCommand = {
       return;
     }
 
-    // Resolve target member
+    // Normalize args
+    args = args || [];
+
+    // Determine target user id and optionally the GuildMember if present
+    let targetUserId: string | null = null;
     let targetMember: GuildMember | null = null;
     let targetUser: User | null = null;
 
-    // Prefer mention
-    if (message.mentions.members && message.mentions.members.size > 0) {
-      targetMember = message.mentions.members.first() || null;
-      targetUser = targetMember?.user ?? null;
-    } else if (args[0]) {
-      // Try as ID
-      const id = args[0].replace(/[<@!>]/g, "");
-      try {
-        targetMember = await message.guild.members.fetch(id).catch(() => null);
-        targetUser = targetMember?.user ?? null;
-      } catch {
-        targetMember = null;
+    // if the command is a reply, prefer the referenced message author
+    if (message.reference && message.reference.messageId) {
+      const referenced = await message.channel.messages
+        .fetch(message.reference.messageId)
+        .catch(() => null);
+      if (referenced) {
+        targetUserId = referenced.author.id;
+        // try to resolve guild member (may be null if user left)
+        targetMember = await message.guild.members
+          .fetch(targetUserId)
+          .catch(() => null);
+        targetUser = referenced.author;
       }
     }
 
-    if (!targetMember || !targetUser) {
+    // if not resolved from reply, check mentions or first arg as ID
+    if (!targetUserId) {
+      if (message.mentions && message.mentions.users.size > 0) {
+        const u = message.mentions.users.first()!;
+        targetUserId = u.id;
+        targetUser = u;
+        targetMember = message.guild.members.cache.get(u.id) ?? null;
+      } else if (args[0]) {
+        // treat args[0] as an ID/mention candidate
+        const candidate = args[0].replace(/[<@!>]/g, "");
+        if (/^\d{16,20}$/.test(candidate)) {
+          // looks like an ID
+          targetUserId = candidate;
+          // try to fetch member; may fail if not in guild
+          targetMember = await message.guild.members
+            .fetch(candidate)
+            .catch(() => null);
+          // try to fetch global user (useful for embed fields)
+          targetUser = await message.client.users
+            .fetch(candidate)
+            .catch(() => null);
+        } else {
+          // not an id-like token and not a mention -> will fall through and error later
+          targetUserId = null;
+        }
+      }
+    }
+
+    if (!targetUserId) {
       await message.reply({
         embeds: [
           createErrorEmbed(
             "User Not Found",
-            `❌ Could not find the specified user. Please mention the user or provide their ID.
+            `❌ Could not determine the target user.
 
-    **Usage:** \`${process.env.PREFIX || "S"}ban @user [deleteTime e.g. 7d, 30min, 0] [reason...]\`
-    **Example:** \`${process.env.PREFIX || "S"}ban @user 7d Spamming chat\``,
+• Reply to the user's message and run \`${process.env.PREFIX || "S"}ban <deleteTime?> [reason]\`
+• Or mention the user / provide their ID: \`${process.env.PREFIX || "S"}ban @user 7d Spamming\`
+• You may also ban users not on server by ID: \`${process.env.PREFIX || "S"}ban 123456789012345678 7d Reason\``,
           ),
         ],
       });
@@ -111,7 +144,7 @@ const banCommand: PrefixCommand = {
     }
 
     // Prevent self / bot / owner banning
-    if (targetUser.id === message.author.id) {
+    if (targetUserId === message.author.id) {
       await message.reply({
         embeds: [
           createErrorEmbed("Invalid Target", "❌ You cannot ban yourself."),
@@ -119,13 +152,13 @@ const banCommand: PrefixCommand = {
       });
       return;
     }
-    if (targetUser.id === message.client.user?.id) {
+    if (targetUserId === message.client.user?.id) {
       await message.reply({
         embeds: [createErrorEmbed("Invalid Target", "❌ I cannot ban myself.")],
       });
       return;
     }
-    if (targetUser.id === message.guild.ownerId) {
+    if (targetUserId === message.guild.ownerId) {
       await message.reply({
         embeds: [
           createErrorEmbed(
@@ -137,60 +170,78 @@ const banCommand: PrefixCommand = {
       return;
     }
 
-    // Role hierarchy checks
-    const executorHighest = executor.roles.highest?.position ?? 0;
-    const targetHighest = targetMember.roles.highest?.position ?? 0;
-    const botHighest = botMember?.roles.highest?.position ?? 0;
+    // If we have a guild member, perform role hierarchy checks
+    if (targetMember) {
+      const executorHighest = executor.roles.highest?.position ?? 0;
+      const targetHighest = targetMember.roles.highest?.position ?? 0;
+      const botHighest = botMember?.roles.highest?.position ?? 0;
 
+      if (
+        executorHighest <= targetHighest &&
+        message.guild.ownerId !== message.author.id
+      ) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "Role Hierarchy",
+              "❌ You cannot ban this member because they have an equal or higher role than you.",
+            ),
+          ],
+        });
+        return;
+      }
+
+      if (botHighest <= targetHighest) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "Bot Role Hierarchy",
+              "❌ I cannot ban this member because their highest role is higher than (or equal to) mine.",
+            ),
+          ],
+        });
+        return;
+      }
+    }
+
+    // Parse delete-time token from args (flexible position)
+    // Valid tokens: number optionally followed by unit (s/sec/secs, m/min/mins, h/hr/hrs, d/day/days)
+    const timeRegex = /^(\d+)(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?$/i;
+
+    // When used as reply, the first arg is likely deleteTime; otherwise the deleteTime might be at args[1]
+    // We'll scan args for the first token that matches timeRegex (but skip the token that we used as user id in non-reply case)
+    let argsForScan = args.slice();
+    // If we used args[0] as the ID/mention, remove it from scan so it's not mistaken for a time token
     if (
-      executorHighest <= targetHighest &&
-      message.guild.ownerId !== message.author.id
+      !(message.reference && message.reference.messageId) &&
+      message.mentions.users.size === 0 &&
+      argsForScan.length > 0
     ) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "Role Hierarchy",
-            "❌ You cannot ban this member because they have an equal or higher role than you.",
-          ),
-        ],
-      });
-      return;
+      // We consumed args[0] as the target id when not using reply/mention
+      argsForScan = argsForScan.slice(1);
     }
 
-    if (botHighest <= targetHighest) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "Bot Role Hierarchy",
-            "❌ I cannot ban this member because their highest role is higher than (or equal to) mine.",
-          ),
-        ],
-      });
-      return;
-    }
-
-    // Parse delete time
-    let deleteDays = 0;
+    const timeIndex = argsForScan.findIndex((a) => timeRegex.test(a));
     let deleteMessageSeconds = 0;
     let displayDeleteTime = "0";
-    let reasonParts: string[] = [];
+    let consumedIndicesInOriginal: number[] = []; // we'll remove used tokens from original args for reason building
 
-    // args[] may start with the user mention/id; remove it for parsing
-    const consumed =
-      message.mentions.members && message.mentions.members.size > 0 ? 1 : 1;
-    const remaining = args.slice(consumed);
-
-    // Attempt to parse a time token from the first remaining argument
-    if (remaining.length > 0) {
-      const token = remaining[0].toLowerCase();
-      const match = token.match(
-        /^(\d+)(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?$/,
-      );
+    if (timeIndex !== -1) {
+      // map back to original args index
+      let originalIndex = timeIndex;
+      if (
+        !(message.reference && message.reference.messageId) &&
+        message.mentions.users.size === 0 &&
+        args.length > 0
+      ) {
+        originalIndex = timeIndex + 1;
+      }
+      const token = args[originalIndex].toLowerCase();
+      const match = token.match(timeRegex);
       if (match) {
         const num = Number(match[1]);
-        const unit = match[2] || "d";
+        const unit = (match[2] || "d").toLowerCase();
         let seconds = 0;
-
         if (["s", "sec", "secs"].includes(unit)) {
           seconds = num;
         } else if (["m", "min", "mins"].includes(unit)) {
@@ -202,47 +253,60 @@ const banCommand: PrefixCommand = {
           seconds = num * 24 * 60 * 60;
         }
 
-        // Clamp to a maximum of 7 days
+        // Discord allows up to 7 days for message deletion on ban (limit historically)
         const maxSeconds = 7 * 24 * 60 * 60;
         if (seconds > maxSeconds) seconds = maxSeconds;
 
         deleteMessageSeconds = seconds;
-        deleteDays = Math.floor(deleteMessageSeconds / (24 * 60 * 60));
+        displayDeleteTime =
+          deleteMessageSeconds === 0
+            ? "0"
+            : deleteMessageSeconds % (24 * 60 * 60) === 0
+              ? `${deleteMessageSeconds / (24 * 60 * 60)} day(s)`
+              : deleteMessageSeconds % 3600 === 0
+                ? `${deleteMessageSeconds / 3600} hour(s)`
+                : deleteMessageSeconds % 60 === 0
+                  ? `${deleteMessageSeconds / 60} minute(s)`
+                  : `${deleteMessageSeconds} second(s)`;
 
-        // Human-friendly display
-        if (deleteMessageSeconds === 0) {
-          displayDeleteTime = "0";
-        } else if (deleteMessageSeconds % (24 * 60 * 60) === 0) {
-          const d = deleteMessageSeconds / (24 * 60 * 60);
-          displayDeleteTime = `${d} day(s)`;
-        } else if (deleteMessageSeconds % 3600 === 0) {
-          const h = deleteMessageSeconds / 3600;
-          displayDeleteTime = `${h} hour(s)`;
-        } else if (deleteMessageSeconds % 60 === 0) {
-          const m = deleteMessageSeconds / 60;
-          displayDeleteTime = `${m} minute(s)`;
-        } else {
-          displayDeleteTime = `${deleteMessageSeconds} second(s)`;
-        }
-
-        reasonParts = remaining.slice(1);
-      } else {
-        // First token isn't a time specifier -> treat everything as the reason
-        reasonParts = remaining.slice(0);
-        deleteMessageSeconds = 0;
-        displayDeleteTime = "0";
+        consumedIndicesInOriginal.push(originalIndex);
       }
-    } else {
-      reasonParts = [];
-      deleteMessageSeconds = 0;
-      displayDeleteTime = "0";
+    }
+
+    // Reason: build from args excluding the consumed user token (if any) and the time token
+    const argsCopyForReason = args.slice();
+
+    // Remove user arg if we consumed args[0] as the user (non-reply non-mention)
+    if (
+      !(message.reference && message.reference.messageId) &&
+      message.mentions.users.size === 0 &&
+      argsCopyForReason.length > 0
+    ) {
+      // we used args[0] to determine targetUserId earlier
+      argsCopyForReason.shift();
+    }
+
+    // Remove any time token we consumed (first occurrence in argsCopyForReason that matches timeRegex)
+    const timeTokenIdxInCopy = argsCopyForReason.findIndex((a) =>
+      timeRegex.test(a),
+    );
+    if (timeTokenIdxInCopy !== -1) {
+      argsCopyForReason.splice(timeTokenIdxInCopy, 1);
     }
 
     const reason =
-      reasonParts.join(" ").trim() || `Banned by ${message.author.tag}`;
-    // Perform the ban
+      argsCopyForReason.join(" ").trim() || `Banned by ${message.author.tag}`;
+
+    // Ensure we have a User object (for embeds). Try to fetch if absent.
+    if (!targetUser) {
+      targetUser = await message.client.users
+        .fetch(targetUserId)
+        .catch(() => null);
+    }
+
     try {
-      await targetMember.ban({
+      // use Guild bans.create
+      await message.guild.bans.create(targetUserId, {
         deleteMessageSeconds: deleteMessageSeconds,
         reason: `${reason} — banned by ${message.author.tag}`,
       });
@@ -250,10 +314,16 @@ const banCommand: PrefixCommand = {
       const success = new EmbedBuilder()
         .setTitle("✅ User Banned")
         .setColor(Colors.Green)
-        .setDescription(`${targetUser.tag} has been banned from the server.`)
+        .setDescription(
+          `${targetUser ? targetUser.tag : targetUserId} has been banned from the server.`,
+        )
         .addFields(
-          { name: "👤 Member", value: `${targetUser.tag}`, inline: true },
-          { name: "🆔 ID", value: targetUser.id, inline: true },
+          {
+            name: "👤 Member",
+            value: `${targetUser ? targetUser.tag : targetUserId}`,
+            inline: true,
+          },
+          { name: "🆔 ID", value: targetUserId, inline: true },
           {
             name: "🛡️ Moderator",
             value: `${message.author.tag}`,
@@ -270,9 +340,20 @@ const banCommand: PrefixCommand = {
             inline: false,
           },
         )
-        .setThumbnail(targetUser.displayAvatarURL())
+        .setThumbnail(targetUser ? targetUser.displayAvatarURL() : null)
         .setTimestamp()
         .setFooter({ text: `Action performed by ${message.author.tag}` });
+
+      // If command was used as a reply and we have the referenced message, reply to that message for context.
+      if (message.reference && message.reference.messageId) {
+        const referenced = await message.channel.messages
+          .fetch(message.reference.messageId)
+          .catch(() => null);
+        if (referenced) {
+          await referenced.reply({ embeds: [success] }).catch(() => {});
+          return;
+        }
+      }
 
       await message.reply({ embeds: [success] });
     } catch (err) {
@@ -281,7 +362,7 @@ const banCommand: PrefixCommand = {
         embeds: [
           createErrorEmbed(
             "Ban Failed",
-            "❌ Failed to ban the member. Please ensure I have the proper permissions and role hierarchy.",
+            "❌ Failed to ban the member. Please ensure I have the proper permissions and role hierarchy, and that the provided ID is valid.",
           ),
         ],
       });
