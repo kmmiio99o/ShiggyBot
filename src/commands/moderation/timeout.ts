@@ -74,52 +74,38 @@ const timeoutCommand: PrefixCommand = {
       return;
     }
 
-    if (!message.reference) {
-      // Not a reply: require both user and duration
-      if (!args[0] || !args[1]) {
-        await message.reply({
-          embeds: [
-            createErrorEmbed(
-              "Usage Error",
-              `❌ Please provide both a user and duration.
+    // Normalize args (ensure it's an array)
+    args = args || [];
 
-**Usage:** \`${process.env.PREFIX || "S"}timeout @user <duration> [reason]\`
-**Duration Examples:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
-**Maximum:** 28 days
-**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
-            ),
-          ],
-        });
-        return;
-      }
-    } else {
-      // Is a reply: require at least a duration (args[0])
-      if (!args[0]) {
-        await message.reply({
-          embeds: [
-            createErrorEmbed(
-              "Usage Error",
-              `❌ Please provide a duration when using this command as a reply.
+    // Find duration token anywhere in args (e.g. 30s, 10m, 2h, 1d)
+    const durationRegex = /^(\d+)(s|m|h|d)$/i;
+    const durationIndex = args.findIndex((a) => durationRegex.test(a));
+    if (durationIndex === -1) {
+      // If used as a reply, still require a duration token
+      await message.reply({
+        embeds: [
+          createErrorEmbed(
+            "Invalid Duration Format",
+            `❌ Invalid duration format.
 
-**Usage:** \`${process.env.PREFIX || "S"}timeout <duration> [reason]\` (reply to the user)
-**Duration Examples:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
-**Maximum:** 28 days
-**Example:** \`${process.env.PREFIX || "S"}timeout 30m Spamming\` (reply to the user)`,
-            ),
-          ],
-        });
-        return;
-      }
+**Valid Formats:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
+• \`s\` = seconds
+• \`m\` = minutes
+• \`h\` = hours
+• \`d\` = days
+**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\` (or reply with \`${process.env.PREFIX || "S"}timeout 30m Spamming\`)`,
+          ),
+        ],
+      });
+      return;
     }
+    const durationToken = args[durationIndex];
 
     // Resolve target member (mention or ID)
     let target: GuildMember | null = null;
-    let durationArgIndex = 1;
-    if (message.mentions.members && message.mentions.members.size > 0) {
-      target = message.mentions.members.first() || null;
-      durationArgIndex = 1;
-    } else if (message.reference && message.reference.messageId) {
-      // If the command was used as a reply, fetch the replied-to message and use its author
+
+    if (message.reference && message.reference.messageId) {
+      // Reply case: try to fetch the referenced message author
       const referenced = await message.channel.messages
         .fetch(message.reference.messageId)
         .catch(() => null);
@@ -127,14 +113,27 @@ const timeoutCommand: PrefixCommand = {
         target = await message.guild.members
           .fetch(referenced.author.id)
           .catch(() => null);
-        durationArgIndex = 0;
       }
-    } else {
-      const id = args[0] ? args[0].replace(/[<@!>]/g, "") : "";
-      target = id
-        ? await message.guild.members.fetch(id).catch(() => null)
-        : null;
-      durationArgIndex = 1;
+    }
+
+    // If not a reply or failed to fetch referenced author, check mentions
+    if (!target) {
+      if (message.mentions.members && message.mentions.members.size > 0) {
+        // Use the first mentioned member
+        target = message.mentions.members.first() || null;
+      } else {
+        // Look for an ID-like arg (skip duration token)
+        const candidateArg = args.find((a, idx) => {
+          if (idx === durationIndex) return false;
+          // skip obvious reason words
+          return /^\d+$/.test(a) || /^<@!?\d+>$/.test(a) || /^@!?\w+/.test(a);
+        });
+
+        if (candidateArg) {
+          const id = candidateArg.replace(/[<@!>]/g, "");
+          target = await message.guild.members.fetch(id).catch(() => null);
+        }
+      }
     }
 
     if (!target) {
@@ -144,9 +143,10 @@ const timeoutCommand: PrefixCommand = {
             "Member Not Found",
             `❌ Could not find that member in this server.
 
-• Mention the user directly
-• Or provide their user ID
-• Ensure they are currently in this server`,
+• Reply to the user's message and include a duration anywhere in the args (e.g. \`${process.env.PREFIX || "S"}timeout 5m reason\`)
+• Or mention the user and include a duration anywhere in the args (e.g. \`${process.env.PREFIX || "S"}timeout @user 5m reason\`)
+• Or provide their user ID and a duration
+• Ensure the member is currently in this server`,
           ),
         ],
       });
@@ -214,27 +214,8 @@ const timeoutCommand: PrefixCommand = {
       return;
     }
 
-    // Parse duration token (duration may be at args[1] normally, or args[0] if replying)
-    const durationToken = args[durationArgIndex];
-    if (!durationToken) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "Invalid Duration Format",
-            `❌ Invalid duration format.
-
-**Valid Formats:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
-• \`s\` = seconds
-• \`m\` = minutes
-• \`h\` = hours
-• \`d\` = days
-**Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
-          ),
-        ],
-      });
-      return;
-    }
-    const matched = durationToken.match(/^(\d+)(s|m|h|d)$/i);
+    // Parse the duration token
+    const matched = durationToken.match(durationRegex);
     if (!matched) {
       await message.reply({
         embeds: [
@@ -243,10 +224,6 @@ const timeoutCommand: PrefixCommand = {
             `❌ Invalid duration format.
 
 **Valid Formats:** \`30s\`, \`10m\`, \`2h\`, \`1d\`
-• \`s\` = seconds
-• \`m\` = minutes
-• \`h\` = hours
-• \`d\` = days
 **Example:** \`${process.env.PREFIX || "S"}timeout @user 30m Spamming\``,
           ),
         ],
@@ -290,11 +267,30 @@ const timeoutCommand: PrefixCommand = {
     const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
     const appliedMs = Math.min(ms, MAX_TIMEOUT_MS);
 
+    // Build reason: remove the duration token and any used user token from args, then join the rest
+    const argsCopy = args.slice();
+
+    // Remove the duration token (first occurrence)
+    const di = argsCopy.findIndex((a) => a === durationToken);
+    if (di !== -1) argsCopy.splice(di, 1);
+
+    // Remove the member token if it was present in the args (mention or id)
+    // Try to find any arg that matches the target by id or mention form and remove it
+    const possibleMemberTokens = new Set<string>();
+    possibleMemberTokens.add(`<@${target.id}>`);
+    possibleMemberTokens.add(`<@!${target.id}>`);
+    possibleMemberTokens.add(target.id);
+    // Also allow a plain mention string (sometimes mention parsing varies)
+    if (target.user.username)
+      possibleMemberTokens.add(`@${target.user.username}`);
+
+    const memberArgIndex = argsCopy.findIndex((a) =>
+      possibleMemberTokens.has(a),
+    );
+    if (memberArgIndex !== -1) argsCopy.splice(memberArgIndex, 1);
+
     const reason =
-      args
-        .slice(durationArgIndex + 1)
-        .join(" ")
-        .trim() || `Timed out by ${message.author.tag}`;
+      argsCopy.join(" ").trim() || `Timed out by ${message.author.tag}`;
 
     try {
       // Use GuildMember.timeout (discord.js v14) — duration in ms
