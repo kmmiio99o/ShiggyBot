@@ -27,45 +27,60 @@ const removeroleCommand: PrefixCommand = {
       return;
     }
 
-    const targetUser = message.mentions.users.first();
+    let targetUser: any = null;
+    let member: any = null;
+    let roleIdentifier = "";
+
+    // if the command is a reply, prefer the referenced message author
+    if (message.reference && message.reference.messageId) {
+      const referenced = await message.channel.messages
+        .fetch(message.reference.messageId)
+        .catch(() => null);
+      if (referenced) {
+        targetUser = referenced.author;
+        member = await message.guild.members
+          .fetch(targetUser.id)
+          .catch(() => null);
+        // Role identifier is the first argument when replying
+        roleIdentifier = args.join(" ").trim();
+      }
+    }
+
+    // if not resolved from reply, check mentions or first arg as ID
     if (!targetUser) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "User Required",
-            `❌ You need to mention a user to remove a role from.
+      targetUser = message.mentions.users.first();
+      if (!targetUser) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "User Required",
+              `❌ You need to mention a user to remove a role from, or reply to their message.
 
 **Usage:** \`${process.env.PREFIX || "S"}removerole @user <role>\`
 **Example:** \`${process.env.PREFIX || "S"}removerole @user Member\`
+**Reply Usage:** Reply to a user's message and use \`${process.env.PREFIX || "S"}removerole <role>\``,
+            ),
+          ],
+        });
+        return;
+      }
 
-• Mention the user directly
-• Or provide their user ID
-• They must be in this server`,
-          ),
-        ],
-      });
-      return;
+      member = message.guild.members.cache.get(targetUser.id);
+      if (!member) {
+        await message.reply({
+          embeds: [
+            createErrorEmbed(
+              "User Not Found",
+              "❌ That user is not in this server.",
+            ),
+          ],
+        });
+        return;
+      }
+
+      // Role can be mentioned or by name/ID
+      roleIdentifier = args.slice(1).join(" ").trim();
     }
-
-    const member = message.guild.members.cache.get(targetUser.id);
-    if (!member) {
-      await message.reply({
-        embeds: [
-          createErrorEmbed(
-            "User Not Found",
-            `❌ That user is not in this server.
-
-• Make sure they haven't left the server
-• Try mentioning them again
-• Ensure you're using the correct user ID`,
-          ),
-        ],
-      });
-      return;
-    }
-
-    // Role can be mentioned or by name/ID
-    const roleIdentifier = args.slice(1).join(" ").trim();
     if (!roleIdentifier) {
       await message.reply({
         embeds: [
@@ -75,11 +90,7 @@ const removeroleCommand: PrefixCommand = {
 
 **Usage:** \`${process.env.PREFIX || "S"}removerole @user <role>\`
 **Example:** \`${process.env.PREFIX || "S"}removerole @user Member\`
-
-You can specify the role by:
-• Mentioning it: \`@role\`
-• Using its name: \`Member\`
-• Using its ID: \`123456789012345678\``,
+**Reply Usage:** Reply to a user's message and use \`${process.env.PREFIX || "S"}removerole <role>\``,
           ),
         ],
       });
@@ -89,6 +100,12 @@ You can specify the role by:
     const role = message.guild.roles.cache.find(
       (r) =>
         r.name === roleIdentifier ||
+        r.name === `[${roleIdentifier}]` ||
+        r.name === roleIdentifier.replace(/[\[\]]/g, "") ||
+        r.name.toLowerCase() === roleIdentifier.toLowerCase() ||
+        r.name.toLowerCase() === `[${roleIdentifier}]`.toLowerCase() ||
+        r.name.toLowerCase() ===
+          roleIdentifier.replace(/[\[\]]/g, "").toLowerCase() ||
         r.id === roleIdentifier.replace(/[<@&>]/g, ""),
     );
 
