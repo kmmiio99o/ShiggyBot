@@ -121,7 +121,18 @@ async function checkRateLimit(): Promise<void> {
     await new Promise((res) => setTimeout(res, waitTime * 1000));
   }
 }
+/**
+ * Unindents the code so that it starts from indentation level 0, instead of whatever it was in the source code at that specific location.
+ * from: https://github.com/Equicord/Equicord/blob/d5e5ab2670db6570260fb89f5605b213c2962d16/src/plugins/unindent/index.ts#L38-L46
+ */
+function unindent(str: string) {
+    str = str.replace(/\t/g, "    ");
+    const minIndent = str.match(/^ *(?=\S)/gm)
+      ?.reduce((prev, curr) => Math.min(prev, curr.length), Infinity) ?? 0;
 
+    if (!minIndent) return str;
+    return str.replace(new RegExp(`^ {${minIndent}}`, "gm"), "");
+}
 /**
  * Fetches code from URL with proper error handling and timeout
  */
@@ -260,7 +271,7 @@ async function processCodeUrl(
     startLine,
     endLine,
   );
-
+  
   embeds.push(
     createCodeEmbed(
       fullUrl,
@@ -271,7 +282,7 @@ async function processCodeUrl(
       filePath,
       startLine,
       endLine,
-      snippet,
+      unindent(snippet),
       lang,
       actualStart,
       actualEnd,
