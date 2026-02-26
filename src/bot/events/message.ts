@@ -2,7 +2,6 @@ import {
   Client,
   Message,
   PermissionResolvable,
-  APIEmbed,
   EmbedBuilder,
   Colors,
 } from "discord.js";

@@ -93,23 +93,18 @@ export class CommandRegistry {
    */
   private async readDirRecursive(baseDir: string): Promise<string[]> {
     const results: string[] = [];
-    try {
-      const entries = await fs.readdir(baseDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = path.join(baseDir, entry.name);
-        if (entry.isDirectory()) {
-          const nested = await this.readDirRecursive(full);
-          results.push(...nested);
-        } else if (entry.isFile()) {
-          // consider only .ts and .js files (ignore .d.ts etc)
-          if (full.endsWith(".ts") || full.endsWith(".js")) {
-            results.push(full);
-          }
+    const entries = await fs.readdir(baseDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(baseDir, entry.name);
+      if (entry.isDirectory()) {
+        const nested = await this.readDirRecursive(full);
+        results.push(...nested);
+      } else if (entry.isFile()) {
+        // consider only .ts and .js files (ignore .d.ts etc)
+        if (full.endsWith(".ts") || full.endsWith(".js")) {
+          results.push(full);
         }
       }
-    } catch (err: any) {
-      // Propagate ENOENT so callers can handle non-existing directories
-      throw err;
     }
     return results;
   }

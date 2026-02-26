@@ -241,7 +241,7 @@ const banCommand: PrefixCommand = {
       if (match) {
         const num = Number(match[1]);
         const unit = (match[2] || "d").toLowerCase();
-        let seconds = 0;
+        let seconds: number;
         if (["s", "sec", "secs"].includes(unit)) {
           seconds = num;
         } else if (["m", "min", "mins"].includes(unit)) {

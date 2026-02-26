@@ -18,7 +18,7 @@ const noteCommand: PrefixCommand = {
   description:
     "Notes utility — create, view or manage short notes (delegates to snotes).",
   usage: "<subcommand> [args]",
-  async execute(message: Message, args: string[]) {
+  async execute(message: Message, _args: string[]) {
     try {
       // Delegate to the snotes feature which expects the full Message object.
       await handleSnoteCommand(message);

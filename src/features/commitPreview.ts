@@ -5,19 +5,19 @@ import { truncate } from "../utils/helpers";
 
 // Updated regex - simplified to catch common patterns
 const COMMIT_LINK_REGEX =
-  /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com|forgejo\.com|bitbucket\.org)\/([^\/\s]+)\/([^\/\s]+)\/commits?\/([a-f0-9]{7,40})(?:[?#].*)?/gi;
+  /https?:\/\/(?:github\.com|gitlab\.com|gitea\.com|forgejo\.com|bitbucket\.org)\/([^\s/]+)\/([^\s/]+)\/commits?\/([a-f0-9]{7,40})(?:[?#].*)?/gi;
 
 // Simplified API configuration - only GitHub for now
 interface GitHostConfig {
   apiBase: string;
-  commitUrl: (owner: string, repo: string, sha: string) => string;
+  commitUrl: (_owner: string, _repo: string, _sha: string) => string;
 }
 
 const GIT_HOSTS: Record<string, GitHostConfig> = {
   "github.com": {
     apiBase: "https://api.github.com",
-    commitUrl: (owner, repo, sha) =>
-      `https://api.github.com/repos/${owner}/${repo}/commits/${sha}`,
+    commitUrl: (_owner, _repo, _sha) =>
+      `https://api.github.com/repos/${_owner}/${_repo}/commits/${_sha}`,
   },
 };
 
@@ -319,22 +319,6 @@ function createCommitEmbed(
 }
 
 /**
- * Creates error embed
- */
-function createErrorEmbed(
-  url: string,
-  title: string,
-  description: string,
-): EmbedBuilder {
-  return new EmbedBuilder()
-    .setTitle(`❌ ${title}`)
-    .setURL(url)
-    .setDescription(description)
-    .setColor(0xff5555)
-    .setTimestamp();
-}
-
-/**
  * Gets file icon based on extension
  */
 function getFileIcon(filename: string): string {
@@ -456,7 +440,7 @@ export async function autoPreviewCommitLinks(message: Message): Promise<void> {
         ) {
           await (message as any).suppressEmbeds();
         }
-      } catch (error) {
+      } catch {
         // Ignore if we can't suppress embeds
       }
 

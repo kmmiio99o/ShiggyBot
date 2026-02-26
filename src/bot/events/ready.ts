@@ -1,5 +1,4 @@
 import { Client } from "discord.js";
-import { config } from "../../config";
 import { logger } from "../../utils/webhookLogger";
 import { setupPrefixCommands } from "../../commands/prefix";
 
@@ -107,7 +106,7 @@ async function initializeFeatures(client: Client) {
     try {
       if (typeof setupPrefixCommands === "function") {
         try {
-          const maybeCleanup = setupPrefixCommands(client) as unknown;
+          const maybeCleanup = setupPrefixCommands() as unknown;
           if (maybeCleanup != null) {
             if (typeof (maybeCleanup as any).then === "function") {
               const cleanup = await (maybeCleanup as Promise<

@@ -1,4 +1,3 @@
-import { Client } from "discord.js";
 import path from "path";
 import fs from "fs/promises";
 import { commandRegistry } from "./index";
@@ -22,7 +21,7 @@ import { PrefixCommand } from "./types";
  * It will attempt to import any `.js` or `.ts` files it finds and register the
  * default export (or the module itself) as a `PrefixCommand`.
  */
-export async function setupPrefixCommands(client: Client): Promise<() => void> {
+export async function setupPrefixCommands(): Promise<() => void> {
   try {
     const commandsBasePath = __dirname;
     const candidateDirs = ["moderation", "search", "utility"];

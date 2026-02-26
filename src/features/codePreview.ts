@@ -9,13 +9,12 @@
  */
 
 import fetch from "node-fetch";
-import { Message, EmbedBuilder, ColorResolvable } from "discord.js";
-import { logger } from "../utils/webhookLogger";
+import { Message, EmbedBuilder } from "discord.js";
 import { truncate } from "../utils/helpers";
 
 // Regex captures standard Git host URLs
 const CODE_LINK_REGEX =
-  /https?:\/\/(?:www\.)?(raw\.githubusercontent\.com|github\.com|gitlab\.com|gitea\.com|forgejo\.com|bitbucket\.org)\/([^\/\s]+)\/([^\/\s]+)\/([^#\s]+)(?:#L(\d+)(?:-L(\d+))?)?/gi;
+  /https?:\/\/(?:www\.)?(raw\.githubusercontent\.com|github\.com|gitlab\.com|gitea\.com|forgejo\.com|bitbucket\.org)\/([^\s/]+)\/([^\s/]+)\/([^#\s]+)(?:#L(\d+)(?:-L(\d+))?)?/gi;
 
 const LANGUAGE_MAP: Record<string, string> = {
   // Web
@@ -89,20 +88,20 @@ const FILENAME_MAP: Record<string, string> = {
 
 const RAW_URL_BUILDERS: Record<
   string,
-  (owner: string, repo: string, ref: string, path: string) => string
+  (_owner: string, _repo: string, _ref: string, _path: string) => string
 > = {
-  "github.com": (owner, repo, ref, path) =>
-    `https://raw.githubusercontent.com/${owner}/${repo}/${ref || "HEAD"}/${path}`,
-  "gitlab.com": (owner, repo, ref, path) =>
-    `https://gitlab.com/${owner}/${repo}/-/raw/${ref || "HEAD"}/${path}`,
-  "gitea.com": (owner, repo, ref, path) =>
-    `https://gitea.com/${owner}/${repo}/raw/${ref || "HEAD"}/${path}`,
-  "forgejo.com": (owner, repo, ref, path) =>
-    `https://forgejo.com/${owner}/${repo}/raw/${ref || "HEAD"}/${path}`,
-  "bitbucket.org": (owner, repo, ref, path) =>
-    `https://bitbucket.org/${owner}/${repo}/raw/${ref || "HEAD"}/${path}`,
-  "raw.githubusercontent.com": (owner, repo, ref, path) =>
-    `https://raw.githubusercontent.com/${owner}/${repo}/${ref || "HEAD"}/${path}`,
+  "github.com": (_owner, _repo, _ref, _path) =>
+    `https://raw.githubusercontent.com/${_owner}/${_repo}/${_ref || "HEAD"}/${_path}`,
+  "gitlab.com": (_owner, _repo, _ref, _path) =>
+    `https://gitlab.com/${_owner}/${_repo}/-/raw/${_ref || "HEAD"}/${_path}`,
+  "gitea.com": (_owner, _repo, _ref, _path) =>
+    `https://gitea.com/${_owner}/${_repo}/raw/${_ref || "HEAD"}/${_path}`,
+  "forgejo.com": (_owner, _repo, _ref, _path) =>
+    `https://forgejo.com/${_owner}/${_repo}/raw/${_ref || "HEAD"}/${_path}`,
+  "bitbucket.org": (_owner, _repo, _ref, _path) =>
+    `https://bitbucket.org/${_owner}/${_repo}/raw/${_ref || "HEAD"}/${_path}`,
+  "raw.githubusercontent.com": (_owner, _repo, _ref, _path) =>
+    `https://raw.githubusercontent.com/${_owner}/${_repo}/${_ref || "HEAD"}/${_path}`,
 };
 
 const rateLimit = { remaining: 60, reset: 0 };
@@ -126,12 +125,14 @@ async function checkRateLimit(): Promise<void> {
  * from: https://github.com/Equicord/Equicord/blob/d5e5ab2670db6570260fb89f5605b213c2962d16/src/plugins/unindent/index.ts#L38-L46
  */
 function unindent(str: string) {
-    str = str.replace(/\t/g, "    ");
-    const minIndent = str.match(/^ *(?=\S)/gm)
+  str = str.replace(/\t/g, "    ");
+  const minIndent =
+    str
+      .match(/^ *(?=\S)/gm)
       ?.reduce((prev, curr) => Math.min(prev, curr.length), Infinity) ?? 0;
 
-    if (!minIndent) return str;
-    return str.replace(new RegExp(`^ {${minIndent}}`, "gm"), "");
+  if (!minIndent) return str;
+  return str.replace(new RegExp(`^ {${minIndent}}`, "gm"), "");
 }
 /**
  * Fetches code from URL with proper error handling and timeout
@@ -164,7 +165,7 @@ async function fetchCode(url: string): Promise<string | null> {
     }
 
     return response.ok ? await response.text() : null;
-  } catch (error) {
+  } catch {
     // If the error was a timeout, it will be an 'AbortError'
     return null;
   }
@@ -241,8 +242,8 @@ async function processCodeUrl(
   if (fullUrl.includes("/releases/download/")) return;
 
   const parts = pathSegment.split("/").filter(Boolean);
-  let ref = "HEAD";
-  let filePath = "";
+  let ref: string;
+  let filePath: string;
 
   // 2. IMPROVED BRANCH PARSING (Supports slashes like feature/fix)
   const sepIdx = parts.findIndex((p) =>
@@ -271,7 +272,7 @@ async function processCodeUrl(
     startLine,
     endLine,
   );
-  
+
   embeds.push(
     createCodeEmbed(
       fullUrl,

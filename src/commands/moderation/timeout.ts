@@ -233,7 +233,7 @@ const timeoutCommand: PrefixCommand = {
 
     const value = Number(matched[1]);
     const unit = matched[2].toLowerCase();
-    let ms = 0;
+    let ms: number;
     switch (unit) {
       case "s":
         ms = value * 1000;

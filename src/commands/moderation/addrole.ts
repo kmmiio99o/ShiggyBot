@@ -102,11 +102,11 @@ const addroleCommand: PrefixCommand = {
       (r) =>
         r.name === roleIdentifier ||
         r.name === `[${roleIdentifier}]` ||
-        r.name === roleIdentifier.replace(/[\[\]]/g, "") ||
+        r.name === roleIdentifier.replace(/[[\]]/g, "") ||
         r.name.toLowerCase() === roleIdentifier.toLowerCase() ||
         r.name.toLowerCase() === `[${roleIdentifier}]`.toLowerCase() ||
         r.name.toLowerCase() ===
-          roleIdentifier.replace(/[\[\]]/g, "").toLowerCase() ||
+          roleIdentifier.replace(/[[\]]/g, "").toLowerCase() ||
         r.id === roleIdentifier.replace(/[<@&>]/g, ""),
     );
 

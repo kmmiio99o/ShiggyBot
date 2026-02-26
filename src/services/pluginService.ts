@@ -49,7 +49,7 @@ async function safeReply(message: Message, content: string) {
 
   try {
     await message.reply({ embeds: [embed] });
-  } catch (err) {
+  } catch {
     try {
       if (
         message.author &&
