@@ -4,14 +4,11 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  TextInputBuilder,
-  TextInputStyle,
-  ModalBuilder,
   EmbedBuilder,
 } from "discord.js";
 import { SlashCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/geminiService.js";
-import { config } from "../../config/index.js";
+import { chatWithGemini, clearHistory } from "../../services/geminiService";
+import { config } from "../../config/index";
 
 const aiSlashCommand: SlashCommand = {
   data: new SlashCommandBuilder()

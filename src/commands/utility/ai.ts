@@ -1,7 +1,7 @@
 import { Message, EmbedBuilder } from "discord.js";
 import { PrefixCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/geminiService.js";
-import { config } from "../../config/index.js";
+import { chatWithGemini, clearHistory } from "../../services/geminiService";
+import { config } from "../../config/index";
 
 const aiCommand: PrefixCommand = {
   name: "ai",
@@ -49,7 +49,8 @@ const aiCommand: PrefixCommand = {
         })
         .setTimestamp();
 
-      await loadingMsg.edit({ embeds: [embed] });
+      await loadingMsg.delete();
+      await message.reply({ embeds: [embed] });
     } catch (error) {
       await loadingMsg.edit(
         `Error: ${error instanceof Error ? error.message : "Unknown error"}`,

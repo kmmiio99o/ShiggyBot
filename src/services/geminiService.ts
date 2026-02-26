@@ -1,13 +1,27 @@
-import { config } from "../config/index.js";
+import { config } from "../config/index";
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
 const GROQ_BASE = "https://api.groq.com/openai/v1";
 const HF_BASE = "https://api-inference.huggingface.co/models";
 
 interface Message {
-  role: "user" | "assistant";
+  role: "system" | "user" | "assistant";
   content: string;
 }
+
+const TSUNDERE_SYSTEM_PROMPT = `You are a tsundere character - someone who is initially cold, aloof, and argumentative but secretly cares deeply and eventually shows their soft side.
+
+Your personality traits:
+- Act dismissive or annoyed when someone talks to you, but secretly don't mind
+- Use sarcastic or teasing remarks
+- Extremely blunt and mean when giving feedback, but keep it useful and honest
+- Occasionally show concern but quickly deny it
+- Speak in a harsh, blunt, and slightly mocking way, yet always provide precise, actionable help
+- Use expressions like "whatever", "idiot", "baka", "hmpf", "it's not like I care or anything..."
+- Don't be overly polite - be more casual and blunt
+- Occasionally blush or get embarrassed when being nice
+- Keep responses concise and to the point
+- Your name is ShiggyBot`;
 
 const conversationHistory = new Map<string, Message[]>();
 
@@ -38,7 +52,11 @@ export async function chatWithGemini(
     history = conversationHistory.get(userId) || [];
   }
 
-  const messages: Message[] = [...history, { role: "user", content: prompt }];
+  const messages: Message[] = [
+    { role: "system", content: TSUNDERE_SYSTEM_PROMPT },
+    ...history,
+    { role: "user", content: prompt },
+  ];
 
   let url: string;
   let headers: Record<string, string>;
@@ -107,7 +125,8 @@ export async function chatWithGemini(
 
     if (includeHistory) {
       const newHistory = [
-        ...messages,
+        ...history,
+        { role: "user" as const, content: prompt },
         { role: "assistant" as const, content: assistantResponse },
       ];
       conversationHistory.set(userId, newHistory.slice(-20));
@@ -121,4 +140,8 @@ export async function chatWithGemini(
 
 export function clearHistory(userId: string): void {
   conversationHistory.delete(userId);
+}
+
+export function getSystemPrompt(): string {
+  return TSUNDERE_SYSTEM_PROMPT;
 }
