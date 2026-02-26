@@ -1,6 +1,8 @@
-import { Client } from "discord.js";
+import { Client, REST, Routes } from "discord.js";
 import { logger } from "../../utils/webhookLogger";
 import { setupPrefixCommands } from "../../commands/prefix";
+import { commandRegistry } from "../../commands/index";
+import { config } from "../../config/index";
 
 let isInitialized = false;
 const cleanupFunctions: Array<() => void> = [];
@@ -124,6 +126,37 @@ async function initializeFeatures(client: Client) {
       }
     } catch (error) {
       console.warn("Failed to initialize prefix commands:", error);
+    }
+
+    // Register slash commands globally
+    try {
+      // Load all commands including slash commands
+      await commandRegistry.registerAllCommands();
+
+      const slashCommands = commandRegistry.getAllSlashCommands();
+      if (slashCommands.length > 0) {
+        const rest = new REST().setToken(config.token);
+        const commands = slashCommands.map((cmd) => (cmd.data as any).toJSON());
+
+        if (config.devGuildId) {
+          await rest.put(
+            Routes.applicationGuildCommands(config.clientId, config.devGuildId),
+            { body: commands },
+          );
+          console.log(
+            `Registered ${slashCommands.length} slash commands to dev guild`,
+          );
+        } else {
+          await rest.put(Routes.applicationCommands(config.clientId), {
+            body: commands,
+          });
+          console.log(
+            `Registered ${slashCommands.length} global slash commands`,
+          );
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to register slash commands:", error);
     }
   } catch (error) {
     console.error(

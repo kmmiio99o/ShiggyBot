@@ -43,6 +43,24 @@ export function setupMessageHandler(client: Client): () => void {
 async function processMessage(message: Message): Promise<void> {
   const lowercasedContent = message.content.toLowerCase();
 
+  // Check if message is a reply to the bot
+  const isReplyToBot =
+    message.reference?.messageId &&
+    message.client.user &&
+    message.author.id !== message.client.user.id;
+
+  // Handle AI chat if message is a reply to the bot
+  if (isReplyToBot) {
+    const referencedMessage = await message.channel.messages
+      .fetch(message.reference!.messageId!)
+      .catch(() => null);
+
+    if (referencedMessage?.author.id === message.client.user?.id) {
+      await handleAIChat(message);
+      return;
+    }
+  }
+
   // Check for plugin search using [[plugin name]] format first, as it's not prefix-based
   const pluginBracketMatch = message.content.match(/^\[\[(.*?)\]\]$/);
   if (pluginBracketMatch) {
@@ -181,6 +199,28 @@ async function handlePrefixCommand(
       .setTimestamp();
 
     await message.reply({ embeds: [errorEmbed] }).catch(() => {});
+  }
+}
+
+/**
+ * Handles AI chat when user replies to bot message
+ */
+async function handleAIChat(message: Message): Promise<void> {
+  const { chatWithGemini } = await import("../../services/geminiService");
+  const { config } = await import("../../config");
+
+  if (!config.geminiApiKey) {
+    await message.reply("AI is not configured.");
+    return;
+  }
+
+  try {
+    const response = await chatWithGemini(message.content, message.author.id);
+    await message.reply(response);
+  } catch (error) {
+    await message.reply(
+      `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 }
 

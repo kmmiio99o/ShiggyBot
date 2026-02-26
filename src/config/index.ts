@@ -32,6 +32,10 @@ export const config = {
     ? parseInt(process.env.DASHBOARD_PORT, 10)
     : 14150,
 
+  // AI (Groq, or OpenRouter)
+  geminiApiKey:
+    process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || "",
+
   /**
    * Validates the configuration
    * Returns true if valid, false otherwise

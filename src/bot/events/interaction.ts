@@ -5,6 +5,13 @@ import {
   AutocompleteInteraction,
   ButtonInteraction,
   PermissionResolvable,
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from "discord.js";
 import { logger } from "../../utils/webhookLogger";
 import { handlePluginButton } from "../../services/pluginService";
@@ -29,7 +36,7 @@ export function setupInteractionHandler(client: Client): () => void {
             await interaction
               .reply({
                 content: `❌ Unknown slash command: \`${chat.commandName}\``,
-                ephemeral: true,
+                flags: 64,
               })
               .catch(() => {});
           }
@@ -49,7 +56,7 @@ export function setupInteractionHandler(client: Client): () => void {
                   content: `❌ You are missing the following permissions to use this command: \`${missing.join(
                     ", ",
                   )}\``,
-                  ephemeral: true,
+                  flags: 64,
                 })
                 .catch(() => {});
             }
@@ -62,6 +69,8 @@ export function setupInteractionHandler(client: Client): () => void {
       } else if (interaction.isButton()) {
         // Delegate button handling to service
         await handleButtonInteraction(interaction as ButtonInteraction);
+      } else if (interaction.isModalSubmit()) {
+        await handleModalInteraction(interaction);
       } else if (interaction.isAutocomplete()) {
         const auto = interaction as AutocompleteInteraction;
         const command = commandRegistry.getSlashCommand(auto.commandName);
@@ -83,7 +92,7 @@ export function setupInteractionHandler(client: Client): () => void {
         try {
           await interaction.reply({
             content: "❌ An error occurred while processing this interaction.",
-            ephemeral: true,
+            flags: 64,
           });
         } catch {
           // ignore reply errors
@@ -120,12 +129,126 @@ async function handleButtonInteraction(
         try {
           await interaction.reply({
             content: "❌ An error occurred while processing this button.",
-            ephemeral: true,
+            flags: 64,
           });
         } catch {
           // ignore reply errors
         }
       }
+    }
+    return;
+  }
+
+  if (customId.startsWith("ai_embed_")) {
+    try {
+      const response = interaction.message.content;
+      if (!response) {
+        await interaction.reply({
+          content: "No response found.",
+          flags: 64,
+        });
+        return;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle("🤖 AI Response")
+        .setDescription(
+          response.length > 4096
+            ? response.substring(0, 4093) + "..."
+            : response,
+        )
+        .setColor("#7289DA" as any)
+        .setFooter({
+          text: `Requested by ${interaction.user.tag}`,
+          iconURL: interaction.user.displayAvatarURL(),
+        })
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed], flags: 64 });
+    } catch (error) {
+      console.error("❌ Error handling AI embed button:", error);
+      await interaction.reply({
+        content: "❌ An error occurred.",
+        flags: 64,
+      });
+    }
+    return;
+  }
+
+  if (customId.startsWith("ai_reply_")) {
+    const userId = customId.replace("ai_reply_", "");
+
+    const modal = new ModalBuilder()
+      .setCustomId(`ai_modal_${userId}`)
+      .setTitle("Chat with AI")
+      .addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId("ai_message")
+            .setLabel("Your message")
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder("Type your message here...")
+            .setRequired(true),
+        ),
+      );
+
+    await interaction.showModal(modal);
+    return;
+  }
+}
+
+async function handleModalInteraction(interaction: any): Promise<void> {
+  const customId = interaction.customId ?? "";
+
+  if (customId.startsWith("ai_modal_")) {
+    const userId = customId.replace("ai_modal_", "");
+    const message = interaction.fields.getTextInputValue("ai_message");
+
+    await interaction.deferUpdate();
+
+    try {
+      const { chatWithGemini } = await import("../../services/geminiService");
+      const { config: botConfig } = await import("../../config/index");
+
+      if (!botConfig.geminiApiKey) {
+        await interaction.followUp({
+          content: "AI is not configured.",
+          flags: 64,
+        });
+        return;
+      }
+
+      const response = await chatWithGemini(message, userId);
+
+      const embed = new EmbedBuilder()
+        .setDescription(
+          response.length > 4096
+            ? response.substring(0, 4093) + "..."
+            : response,
+        )
+        .setColor("#7289DA")
+        .setFooter({
+          text: `${interaction.user.tag} • Reply to continue`,
+          iconURL: interaction.user.displayAvatarURL(),
+        })
+        .setTimestamp();
+
+      const replyButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`ai_reply_${userId}`)
+          .setLabel("💬 Reply")
+          .setStyle(ButtonStyle.Primary),
+      );
+
+      await interaction.followUp({
+        embeds: [embed],
+        components: [replyButton],
+      });
+    } catch (error) {
+      await interaction.followUp({
+        content: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        flags: 64,
+      });
     }
     return;
   }
