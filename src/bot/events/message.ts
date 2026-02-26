@@ -206,7 +206,7 @@ async function handlePrefixCommand(
  * Handles AI chat when user replies to bot message
  */
 async function handleAIChat(message: Message): Promise<void> {
-  const { chatWithGemini } = await import("../../services/geminiService");
+  const { chatWithGemini } = await import("../../services/aiService");
   const { config } = await import("../../config");
 
   if (!config.geminiApiKey) {

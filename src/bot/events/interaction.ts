@@ -207,7 +207,7 @@ async function handleModalInteraction(interaction: any): Promise<void> {
     await interaction.deferUpdate();
 
     try {
-      const { chatWithGemini } = await import("../../services/geminiService");
+      const { chatWithGemini } = await import("../../services/aiService");
       const { config: botConfig } = await import("../../config/index");
 
       if (!botConfig.geminiApiKey) {

@@ -1,6 +1,6 @@
 import { Message, EmbedBuilder } from "discord.js";
 import { PrefixCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/geminiService";
+import { chatWithGemini, clearHistory } from "../../services/aiService";
 import { config } from "../../config/index";
 
 const aiCommand: PrefixCommand = {

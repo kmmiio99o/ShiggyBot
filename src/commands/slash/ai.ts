@@ -7,7 +7,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { SlashCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/geminiService";
+import { chatWithGemini, clearHistory } from "../../services/aiService";
 import { config } from "../../config/index";
 
 const aiSlashCommand: SlashCommand = {
