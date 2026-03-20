@@ -1,6 +1,6 @@
 import { Message, EmbedBuilder } from "discord.js";
 import { PrefixCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/aiService";
+import { chatWithAI, clearHistory } from "../../services/aiService";
 import { config } from "../../config/index";
 
 const aiCommand: PrefixCommand = {
@@ -8,7 +8,7 @@ const aiCommand: PrefixCommand = {
   description: "Chat with AI",
   aliases: ["gemini", "ask", "clearai"],
   async execute(message: Message, args: string[]) {
-    if (!config.geminiApiKey) {
+    if (!config.huggingfaceApiKey) {
       await message.reply(
         "AI is not configured. Bot owner needs to set an API key.",
       );
@@ -34,7 +34,7 @@ const aiCommand: PrefixCommand = {
     const loadingMsg = await message.reply("🤔 Thinking...");
 
     try {
-      const response = await chatWithGemini(prompt, userId);
+      const response = await chatWithAI(prompt, userId);
 
       const embed = new EmbedBuilder()
         .setDescription(

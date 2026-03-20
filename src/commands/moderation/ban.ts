@@ -5,8 +5,57 @@ import {
   GuildMember,
   User,
   Colors,
+  GuildTextBasedChannel,
 } from "discord.js";
 import { PrefixCommand } from "../types";
+
+async function deleteAllUserMessages(
+  guild: import("discord.js").Guild,
+  userId: string,
+): Promise<number> {
+  const fetchedChannels = guild.channels.cache.filter(
+    (channel): channel is GuildTextBasedChannel =>
+      channel.isTextBased() && !channel.isDMBased(),
+  );
+
+  let totalDeleted = 0;
+
+  for (const channel of fetchedChannels.values()) {
+    try {
+      let hasMore = true;
+      let before: string | undefined;
+
+      while (hasMore) {
+        const messages = await channel.messages.fetch({
+          limit: 100,
+          before,
+        });
+
+        const userMessages = messages.filter((msg) => msg.author.id === userId);
+
+        if (userMessages.size === 0) {
+          hasMore = false;
+          break;
+        }
+
+        await channel.bulkDelete(userMessages, true);
+        totalDeleted += userMessages.size;
+
+        if (messages.size < 100) {
+          hasMore = false;
+        } else {
+          before = messages.lastKey();
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch {
+      // Channel may not be accessible or messages may be too old
+    }
+  }
+
+  return totalDeleted;
+}
 
 const banCommand: PrefixCommand = {
   name: "ban",
@@ -305,6 +354,12 @@ const banCommand: PrefixCommand = {
     }
 
     try {
+      // Delete all messages from the user first
+      const deletedCount = await deleteAllUserMessages(
+        message.guild,
+        targetUserId,
+      );
+
       // use Guild bans.create
       await message.guild.bans.create(targetUserId, {
         deleteMessageSeconds: deleteMessageSeconds,
@@ -323,15 +378,14 @@ const banCommand: PrefixCommand = {
             value: `${targetUser ? targetUser.tag : targetUserId}`,
             inline: true,
           },
-          { name: "🆔 ID", value: targetUserId, inline: true },
           {
             name: "🛡️ Moderator",
             value: `${message.author.tag}`,
             inline: true,
           },
           {
-            name: "🗑️ Deleted Messages",
-            value: displayDeleteTime,
+            name: "🗑️ Messages Deleted",
+            value: `${deletedCount} (past 14 days)`,
             inline: true,
           },
           {

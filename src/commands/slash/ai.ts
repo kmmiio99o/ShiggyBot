@@ -7,7 +7,7 @@ import {
   EmbedBuilder,
 } from "discord.js";
 import { SlashCommand } from "../types";
-import { chatWithGemini, clearHistory } from "../../services/aiService";
+import { chatWithAI, clearHistory } from "../../services/aiService";
 import { config } from "../../config/index";
 
 const aiSlashCommand: SlashCommand = {
@@ -27,7 +27,7 @@ const aiSlashCommand: SlashCommand = {
         .setRequired(false),
     ),
   async execute(interaction: ChatInputCommandInteraction) {
-    if (!config.geminiApiKey) {
+    if (!config.huggingfaceApiKey) {
       await interaction.reply({
         content: "AI is not configured. Bot owner needs to set an API key.",
         flags: 64,
@@ -51,7 +51,7 @@ const aiSlashCommand: SlashCommand = {
     await interaction.deferReply();
 
     try {
-      const response = await chatWithGemini(message, userId);
+      const response = await chatWithAI(message, userId);
 
       const embed = new EmbedBuilder()
         .setDescription(

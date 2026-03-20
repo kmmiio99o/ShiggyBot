@@ -207,10 +207,10 @@ async function handleModalInteraction(interaction: any): Promise<void> {
     await interaction.deferUpdate();
 
     try {
-      const { chatWithGemini } = await import("../../services/aiService");
+      const { chatWithAI } = await import("../../services/aiService");
       const { config: botConfig } = await import("../../config/index");
 
-      if (!botConfig.geminiApiKey) {
+      if (!botConfig.huggingfaceApiKey) {
         await interaction.followUp({
           content: "AI is not configured.",
           flags: 64,
@@ -218,7 +218,7 @@ async function handleModalInteraction(interaction: any): Promise<void> {
         return;
       }
 
-      const response = await chatWithGemini(message, userId);
+      const response = await chatWithAI(message, userId);
 
       const embed = new EmbedBuilder()
         .setDescription(
