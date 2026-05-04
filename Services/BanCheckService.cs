@@ -23,7 +23,7 @@ namespace ShiggyBot.Services
         public void Start()
         {
             // Check every 5 minutes
-            _timer = new Timer(async _ => await CheckExpiredBansAsync(), null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
+            _timer = new(async _ => await CheckExpiredBansAsync(), null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
             Console.WriteLine("[STARTUP] Ban check service started");
         }
 

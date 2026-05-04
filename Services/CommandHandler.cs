@@ -18,8 +18,8 @@ namespace ShiggyBot.Services
     {
         private readonly DiscordSocketClient _client;
         private readonly string _prefix;
-        private readonly Dictionary<string, ICommand> _commands = new Dictionary<string, ICommand>(StringComparer.OrdinalIgnoreCase);
-        private readonly List<ICommand> _commandList = new List<ICommand>();
+        private readonly Dictionary<string, ICommand> _commands = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<ICommand> _commandList = new();
         private readonly IConfiguration _config;
         private readonly DatabaseService _db;
 

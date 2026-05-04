@@ -14,7 +14,7 @@ namespace ShiggyBot.Utils
 
         public WebhookLogger(IConfiguration config)
         {
-            _http = new HttpClient();
+            _http = new();
             _webhookUrl = config["LOG_WEBHOOK_URL"];
         }
 

@@ -12,7 +12,7 @@ namespace ShiggyBot.Features
     public class CommitPreviewFeature
     {
         private readonly DiscordSocketClient _client;
-        private static readonly HttpClient _http = new HttpClient();
+        private static readonly HttpClient _http = new();
 
         public CommitPreviewFeature(DiscordSocketClient client)
         {

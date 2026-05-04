@@ -14,7 +14,7 @@ namespace ShiggyBot.Commands.Utility
     public string Category => "Utility";
     public string[] Aliases => new[] { "notes" };
 
-    private static readonly Dictionary<string, string> Notes = new Dictionary<string, string>
+    private static readonly Dictionary<string, string> Notes = new()
     {
       { "vc", "No one can hear me\n\nDisable Advanced Voice Activity in Voice settings of Discord, and reload the app." },
       { "install", "Installation links\n\nShiggyCord: https://github.com/kmmiio99o/ShiggyCord\nShiggyManager: https://github.com/kmmiio99o/ShiggyManager\nShiggyXposed: https://github.com/kmmiio99o/ShiggyXposed" },

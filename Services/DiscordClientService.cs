@@ -50,18 +50,18 @@ namespace ShiggyBot.Services
             Console.WriteLine("[INIT] Discord client created");
 
             // Initialize database
-            _db = new DatabaseService();
+            _db = new();
             Console.WriteLine("[INIT] Database initialized");
 
             // Initialize command handling (pass database)
-            _commandHandler = new CommandHandler(_client, config.Prefix, _appConfig, _db);
+            _commandHandler = new(_client, config.Prefix, _appConfig, _db);
             Console.WriteLine("[INIT] Command handler initialized");
 
             // Initialize ban check service
-            _banCheck = new BanCheckService(_client, _db);
+            _banCheck = new(_client, _db);
 
             // Initialize webhook logger
-            _webhookLogger = new WebhookLogger(appConfig);
+            _webhookLogger = new(appConfig);
             Console.WriteLine("[INIT] Webhook logger initialized");
         }
 
@@ -80,13 +80,13 @@ namespace ShiggyBot.Services
 
             // Initialize features
             Console.WriteLine("[STARTUP] Initializing features...");
-            _autorole = new AutoroleFeature(_client, _appConfig);
+            _autorole = new(_client, _appConfig);
             Console.WriteLine("[STARTUP] Autorole feature loaded");
-            _presence = new PresenceFeature(_client, _appConfig);
+            _presence = new(_client, _appConfig);
             Console.WriteLine("[STARTUP] Presence feature loaded");
-            _codePreview = new CodePreviewFeature(_client);
+            _codePreview = new(_client);
             Console.WriteLine("[STARTUP] Code preview feature loaded");
-            _commitPreview = new CommitPreviewFeature(_client);
+            _commitPreview = new(_client);
             Console.WriteLine("[STARTUP] Commit preview feature loaded");
 
             // Start ban check service

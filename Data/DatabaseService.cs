@@ -16,7 +16,7 @@ namespace ShiggyBot.Data
             // Store database in the same directory as the executable
             var baseDir = AppContext.BaseDirectory;
             _dbPath = Path.Combine(baseDir, dbPath);
-            _connection = new SqliteConnection($"Data Source={_dbPath}");
+            _connection = new($"Data Source={_dbPath}");
             InitializeDatabase().Wait();
         }
 
