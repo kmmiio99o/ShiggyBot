@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Discord;
 using Discord.WebSocket;
@@ -24,6 +26,7 @@ namespace ShiggyBot.Services
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
         private WebhookLogger? _webhookLogger;
+        // Ephemeral plugin handling is moved to PluginCommand; remove local cache.
 
         public DiscordClientService(BotConfig config, IConfiguration appConfig)
         {
@@ -46,6 +49,7 @@ namespace ShiggyBot.Services
             _client.Disconnected += OnDisconnectedAsync;
             _client.MessageReceived += OnMessageAsync;
             _client.SelectMenuExecuted += OnSelectMenuExecutedAsync;
+            _client.ButtonExecuted += OnButtonExecutedAsync;
 
             Console.WriteLine("[INIT] Discord client created");
 
@@ -129,6 +133,27 @@ namespace ShiggyBot.Services
             }
 
             await _commandHandler.HandleAsync(message);
+        }
+
+        private async Task OnButtonExecutedAsync(SocketMessageComponent component)
+        {
+            try
+            {
+                if (!component.Data.CustomId.StartsWith("plugin_")) return;
+
+                // First give chance to the universal ephemeral router
+                if (EphemeralButtonService.TryHandle(component))
+                {
+                    return;
+                }
+
+                // If not handled by ephemeral router, do nothing (button remains unhandled)
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Button interaction failed: {ex.Message}");
+                await component.RespondAsync("An error occurred.", ephemeral: true);
+            }
         }
 
         private async Task OnSelectMenuExecutedAsync(SocketMessageComponent component)

@@ -22,6 +22,7 @@ namespace ShiggyBot.Services
         private readonly List<ICommand> _commandList = new();
         private readonly IConfiguration _config;
         private readonly DatabaseService _db;
+        private readonly PluginService _pluginService;
 
         public string Prefix => _prefix;
 
@@ -31,6 +32,7 @@ namespace ShiggyBot.Services
             _prefix = prefix ?? "S";
             _config = config;
             _db = db;
+            _pluginService = new PluginService();
             RegisterCommands();
             Console.WriteLine($"[INIT] Registered {_commands.Count} command(s)");
         }
@@ -52,7 +54,7 @@ namespace ShiggyBot.Services
             Register(new RemoveRoleCommand());
 
             // Search Commands
-            Register(new PluginCommand());
+            Register(new PluginCommand(_pluginService));
             Register(new GoogleCommand());
         }
 
