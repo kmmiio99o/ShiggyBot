@@ -1,35 +1,36 @@
-using System.Threading.Tasks;
+using System.Globalization;
 using Discord;
 using Discord.WebSocket;
-using ShiggyBot.Commands;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    public class TimeoutCommand : ICommand
+    internal sealed class TimeoutCommand : ICommand
     {
         public string Name => "timeout";
         public string Description => "Timeout a user for a specified duration";
         public string Category => "Moderation";
-        public string[] Aliases => new string[0];
+        public string[] Aliases => [];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(args);
             if (message.Channel is not SocketGuildChannel guildChannel)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server.")).ConfigureAwait(false);
                 return;
             }
 
             if (!((SocketGuildUser)message.Author).GuildPermissions.ModerateMembers)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need ModerateMembers permission to use this command."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need ModerateMembers permission to use this command.")).ConfigureAwait(false);
                 return;
             }
 
             if (args.Length < 2)
             {
-                var usageEmbed = new EmbedBuilder
+                EmbedBuilder usageEmbed = new()
                 {
                     Title = "🛡️ Timeout Command",
                     Description = "Temporarily mute a user from chatting",
@@ -38,34 +39,46 @@ namespace ShiggyBot.Commands.Moderation
                 usageEmbed.AddField("Usage", "`timeout <user> <duration> [reason]`", inline: false);
                 usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days", inline: false);
                 usageEmbed.AddField("Example", "`timeout @user 10m Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build());
+                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            var userArg = args[0];
-            var durationArg = args[1];
-            var reason = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : "No reason provided";
+            string userArg = args[0];
+            string durationArg = args[1];
+            string reason = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : "No reason provided";
 
-            var guild = guildChannel.Guild;
-            var userId = EmbedHelper.ParseUserMention(userArg);
-            var user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString() == userArg);
+            SocketGuild guild = guildChannel.Guild;
+            ulong? userId = EmbedHelper.ParseUserMention(userArg);
+            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
 
             TimeSpan duration = TimeSpan.FromMinutes(5); // default
-            if (durationArg.EndsWith("s")) duration = TimeSpan.FromSeconds(int.Parse(durationArg.TrimEnd('s')));
-            else if (durationArg.EndsWith("m")) duration = TimeSpan.FromMinutes(int.Parse(durationArg.TrimEnd('m')));
-            else if (durationArg.EndsWith("h")) duration = TimeSpan.FromHours(int.Parse(durationArg.TrimEnd('h')));
-            else if (durationArg.EndsWith("d")) duration = TimeSpan.FromDays(int.Parse(durationArg.TrimEnd('d')));
+            if (durationArg.EndsWith('s'))
+            {
+                duration = TimeSpan.FromSeconds(int.Parse(durationArg.TrimEnd('s'), CultureInfo.InvariantCulture));
+            }
+            else if (durationArg.EndsWith('m'))
+            {
+                duration = TimeSpan.FromMinutes(int.Parse(durationArg.TrimEnd('m'), CultureInfo.InvariantCulture));
+            }
+            else if (durationArg.EndsWith('h'))
+            {
+                duration = TimeSpan.FromHours(int.Parse(durationArg.TrimEnd('h'), CultureInfo.InvariantCulture));
+            }
+            else if (durationArg.EndsWith('d'))
+            {
+                duration = TimeSpan.FromDays(int.Parse(durationArg.TrimEnd('d'), CultureInfo.InvariantCulture));
+            }
 
             try
             {
-                await user.SetTimeOutAsync(duration, new RequestOptions { AuditLogReason = reason });
-                var embed = new EmbedBuilder
+                await user.SetTimeOutAsync(duration, new RequestOptions { AuditLogReason = reason }).ConfigureAwait(false);
+                EmbedBuilder embed = new()
                 {
                     Title = "🛡️ User Timed Out",
                     Color = new Color(0xFFA500),
@@ -77,11 +90,11 @@ namespace ShiggyBot.Commands.Moderation
                 embed.AddField("Reason", reason, inline: false);
                 embed.WithFooter("Timeout action completed");
                 embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build());
+                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
             }
-            catch
+            catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to timeout user. Check role hierarchy."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to timeout user. Check role hierarchy.")).ConfigureAwait(false);
             }
         }
     }

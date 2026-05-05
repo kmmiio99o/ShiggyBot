@@ -1,35 +1,36 @@
-using System.Threading.Tasks;
+using System.Globalization;
 using Discord;
 using Discord.WebSocket;
-using ShiggyBot.Commands;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    public class KickCommand : ICommand
+    internal sealed class KickCommand : ICommand
     {
         public string Name => "kick";
         public string Description => "Kick a user from the server";
         public string Category => "Moderation";
-        public string[] Aliases => new string[0];
+        public string[] Aliases => [];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(args);
             if (message.Channel is not SocketGuildChannel guildChannel)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server.")).ConfigureAwait(false);
                 return;
             }
 
             if (!((SocketGuildUser)message.Author).GuildPermissions.KickMembers)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need KickMembers permission to use this command."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need KickMembers permission to use this command.")).ConfigureAwait(false);
                 return;
             }
 
             if (args.Length == 0)
             {
-                var usageEmbed = new EmbedBuilder
+                EmbedBuilder usageEmbed = new()
                 {
                     Title = "🛡️ Kick Command",
                     Description = "Remove a user from the server temporarily",
@@ -37,27 +38,27 @@ namespace ShiggyBot.Commands.Moderation
                 };
                 usageEmbed.AddField("Usage", "`kick <user> [reason]`", inline: false);
                 usageEmbed.AddField("Example", "`kick @user Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build());
+                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            var userArg = args[0];
-            var reason = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : "No reason provided";
+            string userArg = args[0];
+            string reason = args.Length > 1 ? string.Join(" ", args, 1, args.Length - 1) : "No reason provided";
 
-            var guild = guildChannel.Guild;
-            var userId = EmbedHelper.ParseUserMention(userArg);
-            var user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString() == userArg);
+            SocketGuild guild = guildChannel.Guild;
+            ulong? userId = EmbedHelper.ParseUserMention(userArg);
+            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
 
             try
             {
-                await user.KickAsync(reason);
-                var embed = new EmbedBuilder
+                await user.KickAsync(reason).ConfigureAwait(false);
+                EmbedBuilder embed = new()
                 {
                     Title = "🛡️ User Kicked",
                     Color = new Color(0xFFA500),
@@ -68,11 +69,11 @@ namespace ShiggyBot.Commands.Moderation
                 embed.AddField("Reason", reason, inline: false);
                 embed.WithFooter("Kick action completed");
                 embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build());
+                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
             }
-            catch
+            catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to kick user. Check role hierarchy."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to kick user. Check role hierarchy.")).ConfigureAwait(false);
             }
         }
     }

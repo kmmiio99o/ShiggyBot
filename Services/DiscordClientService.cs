@@ -1,19 +1,15 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Configuration;
 using ShiggyBot.Utils;
 using ShiggyBot.Features;
-using ShiggyBot.Commands;
 using ShiggyBot.Data;
+using ShiggyBot.Commands;
 using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Services
 {
-    public class DiscordClientService : IDisposable
+    internal sealed class DiscordClientService : IDisposable
     {
         private readonly BotConfig _config;
         private readonly DiscordSocketClient _client;
@@ -25,17 +21,20 @@ namespace ShiggyBot.Services
         private PresenceFeature? _presence;
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
-        private WebhookLogger? _webhookLogger;
+        private readonly WebhookLogger? _webhookLogger;
         // Ephemeral plugin handling is moved to PluginCommand; remove local cache.
 
         public DiscordClientService(BotConfig config, IConfiguration appConfig)
         {
+            ArgumentNullException.ThrowIfNull(config);
+            ArgumentNullException.ThrowIfNull(appConfig);
+
             _config = config;
             _appConfig = appConfig;
 
-            Console.WriteLine("[INIT] Initializing ShiggyBot...");
+            Logger.Info("[INIT] Initializing ShiggyBot...");
 
-            var cfg = new DiscordSocketConfig
+            DiscordSocketConfig cfg = new()
             {
                 GatewayIntents = GatewayIntents.Guilds
                                  | GatewayIntents.GuildMembers
@@ -51,80 +50,89 @@ namespace ShiggyBot.Services
             _client.SelectMenuExecuted += OnSelectMenuExecutedAsync;
             _client.ButtonExecuted += OnButtonExecutedAsync;
 
-            Console.WriteLine("[INIT] Discord client created");
+            Logger.Info("[INIT] Discord client created");
 
             // Initialize database
             _db = new();
-            Console.WriteLine("[INIT] Database initialized");
+            Logger.Info("[INIT] Database initialized");
 
             // Initialize command handling (pass database)
             _commandHandler = new(_client, config.Prefix, _appConfig, _db);
-            Console.WriteLine("[INIT] Command handler initialized");
+            Logger.Info("[INIT] Command handler initialized");
 
             // Initialize ban check service
             _banCheck = new(_client, _db);
 
             // Initialize webhook logger
             _webhookLogger = new(appConfig);
-            Console.WriteLine("[INIT] Webhook logger initialized");
+            Logger.Info("[INIT] Webhook logger initialized");
         }
 
         public async Task StartAsync()
         {
             if (string.IsNullOrWhiteSpace(_config.Token))
             {
-                Console.WriteLine("[ERROR] DISCORD_TOKEN is not set. Exiting.");
+                Logger.Error("[ERROR] DISCORD_TOKEN is not set. Exiting.");
                 return;
             }
 
-            Console.WriteLine("[STARTUP] Logging in to Discord...");
-            await _client.LoginAsync(TokenType.Bot, _config.Token);
-            Console.WriteLine("[STARTUP] Starting Discord client...");
-            await _client.StartAsync();
+            Logger.Info("[STARTUP] Logging in to Discord...");
+            await _client.LoginAsync(TokenType.Bot, _config.Token).ConfigureAwait(false);
+            Logger.Info("[STARTUP] Starting Discord client...");
+            await _client.StartAsync().ConfigureAwait(false);
 
             // Initialize features
-            Console.WriteLine("[STARTUP] Initializing features...");
+            Logger.Info("[STARTUP] Initializing features...");
             _autorole = new(_client, _appConfig);
-            Console.WriteLine("[STARTUP] Autorole feature loaded");
+            Logger.Info("[STARTUP] Autorole feature loaded");
             _presence = new(_client, _appConfig);
-            Console.WriteLine("[STARTUP] Presence feature loaded");
+            Logger.Info("[STARTUP] Presence feature loaded");
             _codePreview = new(_client);
-            Console.WriteLine("[STARTUP] Code preview feature loaded");
+            Logger.Info("[STARTUP] Code preview feature loaded");
             _commitPreview = new(_client);
-            Console.WriteLine("[STARTUP] Commit preview feature loaded");
+            Logger.Info("[STARTUP] Commit preview feature loaded");
 
             // Start ban check service
             _banCheck.Start();
 
-            Console.WriteLine("[STARTUP] All features initialized. Bot is running!");
+            Logger.Info("[STARTUP] All features initialized. Bot is running!");
             // Keep the process alive
-            await Task.Delay(-1);
+            await Task.Delay(-1).ConfigureAwait(false);
         }
 
         private Task OnConnectedAsync()
         {
-            Console.WriteLine("[STARTUP] Connected to Discord gateway");
+            Logger.Info("[STARTUP] Connected to Discord gateway");
             return Task.CompletedTask;
         }
 
         private Task OnDisconnectedAsync(Exception? ex)
         {
-            Console.WriteLine($"[WARNING] Disconnected from Discord gateway: {ex?.Message ?? "Unknown reason"}");
+            Logger.Warn($"[WARNING] Disconnected from Discord gateway: {ex?.Message ?? "Unknown reason"}");
             return Task.CompletedTask;
         }
 
-        private Task OnReadyAsync()
+        private async Task OnReadyAsync()
         {
-            Console.WriteLine($"[READY] ShiggyBot is ready! Logged in as {_client.CurrentUser.Username}#{_client.CurrentUser.Discriminator}");
-            Console.WriteLine($"[READY] Connected to {_client.Guilds.Count} server(s)");
-            _webhookLogger?.LogInfoAsync("Bot started and ready.").Wait();
-            return Task.CompletedTask;
+            Logger.Info($"[READY] ShiggyBot is ready! Logged in as {_client.CurrentUser.Username}#{_client.CurrentUser.Discriminator}");
+            Logger.Info($"[READY] Connected to {_client.Guilds.Count} server(s)");
+            if (_webhookLogger != null)
+            {
+                await _webhookLogger.LogErrorAsync("ShiggyBot shutting down").ConfigureAwait(false);
+            }
         }
 
         private async Task OnMessageAsync(SocketMessage message)
         {
-            if (message.Author.IsBot) return;
-            if (string.IsNullOrWhiteSpace(message.Content)) return;
+            if (message.Author.IsBot)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.Content))
+            {
+                return;
+            }
 
             if (!message.Content.StartsWith(_config.Prefix, StringComparison.OrdinalIgnoreCase))
             {
@@ -132,46 +140,80 @@ namespace ShiggyBot.Services
                 return;
             }
 
-            await _commandHandler.HandleAsync(message);
+            await _commandHandler.HandleAsync(message).ConfigureAwait(false);
         }
 
         private async Task OnButtonExecutedAsync(SocketMessageComponent component)
         {
             try
             {
-                if (!component.Data.CustomId.StartsWith("plugin_")) return;
-
-                // First give chance to the universal ephemeral router
                 if (EphemeralButtonService.TryHandle(component))
                 {
                     return;
                 }
 
-                // If not handled by ephemeral router, do nothing (button remains unhandled)
+                await component.RespondAsync("This button is no longer available.", ephemeral: true).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException)
             {
-                Console.WriteLine($"[ERROR] Button interaction failed: {ex.Message}");
-                await component.RespondAsync("An error occurred.", ephemeral: true);
+                // Response may have already been sent
+            }
+            catch (TimeoutException)
+            {
+                // Response may have already been sent
+            }
+            catch (OperationCanceledException ex)
+            {
+                Logger.Error($"[ERROR] Button interaction cancelled: {ex.Message}");
+                try
+                {
+                    await component.RespondAsync("Operation was cancelled.", ephemeral: true).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Already cancelled, nothing more to do
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                Logger.Error($"[ERROR] Button interaction failed: {ex.Message}", ex);
+                try
+                {
+                    await component.RespondAsync("An error occurred.", ephemeral: true).ConfigureAwait(false);
+                }
+                catch (InvalidOperationException)
+                {
+                    // Response may have already been sent
+                }
+                catch (TimeoutException)
+                {
+                    // Response timed out
+                }
             }
         }
 
         private async Task OnSelectMenuExecutedAsync(SocketMessageComponent component)
         {
-            if (component.Data.CustomId != "help_category_select") return;
-
-            var selectedCategory = component.Data.Values.FirstOrDefault();
-            if (string.IsNullOrEmpty(selectedCategory)) return;
-
-            var categories = _commandHandler.GetCommandsByCategory();
-
-            if (categories.TryGetValue(selectedCategory, out var commands))
+            if (component.Data.CustomId != "help_category_select")
             {
-                var prefix = _commandHandler.Prefix;
-                var embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
+                return;
+            }
+
+            string? selectedCategory = component.Data.Values.FirstOrDefault();
+            if (string.IsNullOrEmpty(selectedCategory))
+            {
+                return;
+            }
+
+            Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
+
+            if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
+            {
+                string prefix = _commandHandler.Prefix;
+                Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
 
                 // Rebuild select menu for navigation
-                var menu = new SelectMenuBuilder
+                SelectMenuBuilder menu = new()
                 {
                     CustomId = "help_category_select",
                     Placeholder = "Select a category...",
@@ -179,19 +221,20 @@ namespace ShiggyBot.Services
                     MaxValues = 1
                 };
 
-                foreach (var category in categories)
+                foreach (KeyValuePair<string, List<ICommand>> category in categories)
                 {
-                    var emoji = EmbedHelper.GetCategoryEmoji(category.Key);
-                    menu.AddOption(category.Key, category.Key.ToLower(), $"View {category.Key.ToLower()} commands", new Emoji(emoji));
+                    string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
+                    string keyLower = category.Key.ToUpperInvariant();
+                    menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
                 }
 
-                var components = new ComponentBuilder().WithSelectMenu(menu).Build();
+                MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
 
                 await component.UpdateAsync(msg =>
                 {
                     msg.Embed = embed;
-                    msg.Components = components;
-                });
+                    msg.Components = messageComponents;
+                }).ConfigureAwait(false);
             }
         }
 
@@ -202,8 +245,12 @@ namespace ShiggyBot.Services
             _commitPreview?.Unregister();
             _presence?.Dispose();
             _banCheck?.Stop();
+            _banCheck?.Dispose();
+            _commandHandler?.Dispose();
             _db?.Dispose();
             _client?.Dispose();
+            _webhookLogger?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

@@ -1,57 +1,55 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Data;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Services
 {
-    public class BanCheckService
+    internal sealed class BanCheckService(DiscordSocketClient client, DatabaseService db) : IDisposable
     {
-        private readonly DiscordSocketClient _client;
-        private readonly DatabaseService _db;
         private Timer? _timer;
-
-        public BanCheckService(DiscordSocketClient client, DatabaseService db)
-        {
-            _client = client;
-            _db = db;
-        }
 
         public void Start()
         {
             // Check every 5 minutes
-            _timer = new(async _ => await CheckExpiredBansAsync(), null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
-            Console.WriteLine("[STARTUP] Ban check service started");
+            _timer = new Timer(async _ => await CheckExpiredBansAsync().ConfigureAwait(false), null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
+            Logger.Info("[STARTUP] Ban check service started");
         }
 
         private async Task CheckExpiredBansAsync()
         {
             try
             {
-                var expiredBans = await _db.GetExpiredBansAsync();
-                foreach (var ban in expiredBans)
+                List<TimedBan> expiredBans = await db.GetExpiredBansAsync().ConfigureAwait(false);
+                foreach (TimedBan ban in expiredBans)
                 {
-                    var guild = _client.GetGuild(ban.GuildId);
+                    SocketGuild? guild = client.GetGuild(ban.GuildId);
                     if (guild != null)
                     {
-                        await guild.RemoveBanAsync(ban.UserId);
+                        await guild.RemoveBanAsync(ban.UserId).ConfigureAwait(false);
                         Console.WriteLine($"[INFO] Auto-unbanned user {ban.UserId} from guild {guild.Name}");
                     }
-                    await _db.RemoveTimedBanAsync(ban.GuildId, ban.UserId);
+                    await db.RemoveTimedBanAsync(ban.GuildId, ban.UserId).ConfigureAwait(false);
                 }
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
                 ErrorHandler.LogError("Failed to check expired bans", ex);
+            }
+            catch (TaskCanceledException ex)
+            {
+                ErrorHandler.LogError("Timeout checking expired bans", ex);
             }
         }
 
         public void Stop()
         {
             _timer?.Dispose();
+        }
+
+        public void Dispose()
+        {
+            _timer?.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }

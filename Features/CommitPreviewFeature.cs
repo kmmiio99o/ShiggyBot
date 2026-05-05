@@ -1,15 +1,12 @@
-using System;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Discord;
 using Discord.WebSocket;
-using System.Net.Http;
 using System.Text.Json;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Features
 {
-    public class CommitPreviewFeature
+    internal sealed class CommitPreviewFeature
     {
         private readonly DiscordSocketClient _client;
         private static readonly HttpClient _http = new();
@@ -23,29 +20,35 @@ namespace ShiggyBot.Features
 
         private async Task OnMessageReceivedAsync(SocketMessage message)
         {
-            if (message.Author.IsBot) return;
-            var content = message.Content;
+            if (message.Author.IsBot)
+            {
+                return;
+            }
+            string content = message.Content;
 
-            var pattern = @"https?://github\.com/([\w\-]+)/([\w\-]+)/commit/([\w]+)";
-            var match = Regex.Match(content, pattern, RegexOptions.IgnoreCase);
-            if (!match.Success) return;
+            string pattern = @"https?://github\.com/([\w\-]+)/([\w\-]+)/commit/([\w]+)";
+            Match match = Regex.Match(content, pattern, RegexOptions.IgnoreCase);
+            if (!match.Success)
+            {
+                return;
+            }
 
-            var owner = match.Groups[1].Value;
-            var repo = match.Groups[2].Value;
-            var sha = match.Groups[3].Value;
+            string owner = match.Groups[1].Value;
+            string repo = match.Groups[2].Value;
+            string sha = match.Groups[3].Value;
 
             try
             {
-                var url = $"https://api.github.com/repos/{owner}/{repo}/commits/{sha}";
-                var response = await _http.GetStringAsync(url);
-                using var doc = JsonDocument.Parse(response);
-                var root = doc.RootElement;
+                string url = $"https://api.github.com/repos/{owner}/{repo}/commits/{sha}";
+                string response = await _http.GetStringAsync(new Uri(url)).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(response);
+                JsonElement root = doc.RootElement;
 
-                var commit = root.GetProperty("commit");
-                var msg = commit.GetProperty("message").GetString();
-                var author = commit.GetProperty("author").GetProperty("name").GetString();
+                JsonElement commit = root.GetProperty("commit");
+                string? msg = commit.GetProperty("message").GetString();
+                string? author = commit.GetProperty("author").GetProperty("name").GetString();
 
-                var embed = new EmbedBuilder
+                Embed embed = new EmbedBuilder()
                 {
                     Title = $"Commit in {owner}/{repo}",
                     Description = $"**Message:** {msg}\n**Author:** {author}",
@@ -53,11 +56,16 @@ namespace ShiggyBot.Features
                     Url = match.Value
                 }.Build();
 
-                await message.Channel.SendMessageAsync(embed: embed);
+                await message.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                await ErrorHandler.HandleFeatureErrorAsync(message, ex, "CommitPreview");
+                // Error handler for features expects (Exception, string) parameters
+                await ErrorHandler.HandleFeatureErrorAsync(ex, "CommitPreview").ConfigureAwait(false);
+            }
+            catch (JsonException ex)
+            {
+                await ErrorHandler.HandleFeatureErrorAsync(ex, "CommitPreview").ConfigureAwait(false);
             }
         }
 

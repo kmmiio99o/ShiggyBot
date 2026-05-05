@@ -1,52 +1,66 @@
-using System.Threading.Tasks;
 using Discord;
 using Discord.WebSocket;
-using Discord.Rest;
-using ShiggyBot.Commands;
 using ShiggyBot.Services;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Utility
 {
-    public class HelpCommand : ICommand
+    /// <summary>
+    /// Command to show all available commands with interactive menu.
+    /// </summary>
+    internal sealed class HelpCommand(CommandHandler commandHandler) : ICommand
     {
-        private readonly CommandHandler _commandHandler;
-
-        public HelpCommand(CommandHandler commandHandler)
-        {
-            _commandHandler = commandHandler;
-        }
-
+        /// <summary>
+        /// Gets the name of the command.
+        /// </summary>
         public string Name => "help";
-        public string Description => "Show all available commands with interactive menu";
-        public string Category => "Utility";
-        public string[] Aliases => new[] { "commands" };
 
+        /// <summary>
+        /// Gets the description of the command.
+        /// </summary>
+        public string Description => "Show all available commands with interactive menu";
+
+        /// <summary>
+        /// Gets the category of the command.
+        /// </summary>
+        public string Category => "Utility";
+
+        /// <summary>
+        /// Gets the aliases for the command.
+        /// </summary>
+        public string[] Aliases => ["commands"];
+
+        /// <summary>
+        /// Executes the help command.
+        /// </summary>
+        /// <param name="message">The user message that triggered the command.</param>
+        /// <param name="args">The command arguments.</param>
+        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
-            var prefix = _commandHandler.Prefix;
-            var categories = _commandHandler.GetCommandsByCategory();
+            string prefix = commandHandler.Prefix;
+            Dictionary<string, List<ICommand>> categories = commandHandler.GetCommandsByCategory();
 
             if (args.Length > 0)
             {
-                var cmdName = args[0].ToLower();
-                var command = _commandHandler.GetCommandByName(cmdName);
+                string cmdName = args[0].ToUpperInvariant();
+                ICommand? command = commandHandler.GetCommandByName(cmdName);
                 if (command != null)
                 {
-                    await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildCommandHelpEmbed(command, prefix));
+                    await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildCommandHelpEmbed(command, prefix)).ConfigureAwait(false);
                     return;
                 }
             }
 
-            var embed = EmbedHelper.BuildMainHelpEmbed(categories, prefix);
-            var components = BuildSelectMenu(categories);
+            Embed embed = EmbedHelper.BuildMainHelpEmbed(categories, prefix);
+            MessageComponent components = BuildSelectMenu(categories);
 
-            await message.Channel.SendMessageAsync(embed: embed, components: components);
+            await message.Channel.SendMessageAsync(embed: embed, components: components).ConfigureAwait(false);
         }
 
-        private MessageComponent BuildSelectMenu(Dictionary<string, List<ICommand>> categories)
+        private static MessageComponent BuildSelectMenu(Dictionary<string, List<ICommand>> categories)
         {
-            var menu = new SelectMenuBuilder
+            SelectMenuBuilder menu = new()
             {
                 CustomId = "help_category_select",
                 Placeholder = "Select a category...",
@@ -54,10 +68,11 @@ namespace ShiggyBot.Commands.Utility
                 MaxValues = 1
             };
 
-            foreach (var category in categories)
+            foreach (KeyValuePair<string, List<ICommand>> category in categories)
             {
-                var emoji = EmbedHelper.GetCategoryEmoji(category.Key);
-                menu.AddOption(category.Key, category.Key.ToLower(), $"View {category.Key.ToLower()} commands", new Emoji(emoji));
+                string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
+                string keyUpper = category.Key.ToUpperInvariant();
+                menu.AddOption(category.Key, keyUpper, $"View {keyUpper} commands", new Emoji(emoji));
             }
 
             return new ComponentBuilder()

@@ -1,37 +1,37 @@
-using System;
-using System.Threading.Tasks;
 using Discord;
 using Discord.WebSocket;
 
 namespace ShiggyBot.Utils
 {
-    public static class ErrorHandler
+    internal static class ErrorHandler
     {
         public static async Task HandleCommandErrorAsync(SocketUserMessage message, Exception ex, string commandName)
         {
-            Console.WriteLine($"Error in command '{commandName}': {ex}");
+            ArgumentNullException.ThrowIfNull(message);
+            Logger.Error($"Error in command '{commandName}': {ex}", ex);
 
-            var embed = EmbedHelper.BuildErrorEmbed($"An error occurred while executing `{commandName}`.");
-            await message.Channel.SendMessageAsync(embed: embed);
+            Embed embed = EmbedHelper.BuildErrorEmbed($"An error occurred while executing `{commandName}`.");
+            await message.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
         }
 
-        public static async Task HandleFeatureErrorAsync(SocketMessage message, Exception ex, string featureName)
+        public static Task HandleFeatureErrorAsync(Exception ex, string featureName)
         {
-            Console.WriteLine($"Error in feature '{featureName}': {ex}");
+            Logger.Error($"Error in feature '{featureName}': {ex}", ex);
             // Features typically don't respond on error to avoid spam
+            return Task.CompletedTask;
         }
 
         public static void LogWarning(string message)
         {
-            Console.WriteLine($"Warning: {message}");
+            Logger.Warn(message);
         }
 
         public static void LogError(string message, Exception? ex = null)
         {
-            Console.WriteLine($"Error: {message}");
+            Logger.Error(message);
             if (ex != null)
             {
-                Console.WriteLine(ex);
+                Logger.Error(ex.ToString(), ex);
             }
         }
     }

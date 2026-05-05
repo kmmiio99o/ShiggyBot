@@ -1,127 +1,141 @@
-using System.Threading.Tasks;
+using System.Globalization;
 using Discord;
 using Discord.WebSocket;
-using ShiggyBot.Commands;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    public class BanCommand : ICommand
+    internal sealed class BanCommand(DatabaseService db) : ICommand
     {
-        private readonly DatabaseService _db;
-
-        public BanCommand(DatabaseService db)
-        {
-            _db = db;
-        }
-
         public string Name => "ban";
         public string Description => "Ban a user from the server (supports timed bans)";
         public string Category => "Moderation";
-        public string[] Aliases => new string[0];
+        public string[] Aliases => [];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(args);
             if (message.Channel is not SocketGuildChannel guildChannel)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server.")).ConfigureAwait(false);
                 return;
             }
 
             if (!((SocketGuildUser)message.Author).GuildPermissions.BanMembers)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need BanMembers permission to use this command."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need BanMembers permission to use this command.")).ConfigureAwait(false);
                 return;
             }
 
             if (args.Length == 0)
             {
-                var usageEmbed = new EmbedBuilder
+                EmbedBuilder usageEmbed = new()
                 {
                     Title = "🛡️ Ban Command",
                     Description = "Permanently ban a user from the server",
                     Color = new Color(0xFFA500)
                 };
-                usageEmbed.AddField("Usage", "`ban <user> [duration] [reason]`", inline: false);
-                usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days (optional)", inline: false);
-                usageEmbed.AddField("Example", "`ban @user 7d Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build());
+                _ = usageEmbed.AddField("Usage", "`ban <user> [duration] [reason]`", inline: false);
+                _ = usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days (optional)", inline: false);
+                _ = usageEmbed.AddField("Example", "`ban @user 7d Breaking rules`", inline: false);
+                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            var userArg = args[0];
+            string userArg = args[0];
             int deleteDays = 0;
 
             // Check if second arg is a duration
             TimeSpan? duration = null;
             int reasonStart = 1;
-            if (args.Length > 1 && TryParseDuration(args[1], out var parsedDuration))
+            if (args.Length > 1 && TryParseDuration(args[1], out TimeSpan parsedDuration))
             {
                 duration = parsedDuration;
                 reasonStart = 2;
             }
 
-            var reason = args.Length > reasonStart ? string.Join(" ", args, reasonStart, args.Length - reasonStart) : "No reason provided";
+            string reason = args.Length > reasonStart ? string.Join(" ", args, reasonStart, args.Length - reasonStart) : "No reason provided";
 
-            var guild = guildChannel.Guild;
-            var userId = EmbedHelper.ParseUserMention(userArg);
-            var user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString() == userArg);
+            SocketGuild guild = guildChannel.Guild;
+            ulong? userId = EmbedHelper.ParseUserMention(userArg);
+            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
 
             try
             {
-                await user.BanAsync(deleteDays, reason);
+                await user.BanAsync(deleteDays, reason).ConfigureAwait(false);
 
                 // If timed ban, add to database
                 if (duration.HasValue)
                 {
-                    var unbanTime = DateTime.UtcNow.Add(duration.Value);
-                    await _db.AddTimedBanAsync(guild.Id, user.Id, unbanTime, reason, message.Author.Id);
+                    DateTime unbanTime = DateTime.UtcNow.Add(duration.Value);
+                    await db.AddTimedBanAsync(guild.Id, user.Id, unbanTime, reason, message.Author.Id).ConfigureAwait(false);
                 }
 
-                var embed = new EmbedBuilder
+                EmbedBuilder embed = new()
                 {
                     Title = "🛡️ User Banned",
                     Color = new Color(0xFF0000),
                     ThumbnailUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl()
                 };
-                embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                embed.AddField("Moderator", message.Author.Username, inline: true);
-                embed.AddField("Reason", reason, inline: false);
+                _ = embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
+                _ = embed.AddField("Moderator", message.Author.Username, inline: true);
+                _ = embed.AddField("Reason", reason, inline: false);
                 if (duration.HasValue)
-                    embed.AddField("Duration", $"{duration.Value.TotalDays} day(s)", inline: true);
-                embed.AddField("Delete Messages", $"Last {deleteDays} day(s)", inline: true);
+                {
+                    _ = embed.AddField("Duration", $"{duration.Value.TotalDays} day(s)", inline: true);
+                }
+                _ = embed.AddField("Delete Messages", $"Last {deleteDays} day(s)", inline: true);
                 embed.WithFooter("Ban action completed");
                 embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build());
+                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
             }
-            catch
+            catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to ban user. Check role hierarchy."));
+                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to ban user. Check role hierarchy.")).ConfigureAwait(false);
             }
         }
 
         private static bool TryParseDuration(string input, out TimeSpan duration)
         {
             duration = TimeSpan.Zero;
-            if (string.IsNullOrEmpty(input)) return false;
+            if (string.IsNullOrEmpty(input))
+            {
+                return false;
+            }
 
             try
             {
-                if (input.EndsWith("s")) duration = TimeSpan.FromSeconds(int.Parse(input.TrimEnd('s')));
-                else if (input.EndsWith("m")) duration = TimeSpan.FromMinutes(int.Parse(input.TrimEnd('m')));
-                else if (input.EndsWith("h")) duration = TimeSpan.FromHours(int.Parse(input.TrimEnd('h')));
-                else if (input.EndsWith("d")) duration = TimeSpan.FromDays(int.Parse(input.TrimEnd('d')));
-                else return false;
+                if (input.EndsWith('s'))
+                {
+                    duration = TimeSpan.FromSeconds(int.Parse(input.TrimEnd('s'), CultureInfo.InvariantCulture));
+                }
+                else if (input.EndsWith('m'))
+                {
+                    duration = TimeSpan.FromMinutes(int.Parse(input.TrimEnd('m'), CultureInfo.InvariantCulture));
+                }
+                else if (input.EndsWith('h'))
+                {
+                    duration = TimeSpan.FromHours(int.Parse(input.TrimEnd('h'), CultureInfo.InvariantCulture));
+                }
+                else if (input.EndsWith('d'))
+                {
+                    duration = TimeSpan.FromDays(int.Parse(input.TrimEnd('d'), CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    return false;
+                }
                 return true;
             }
-            catch
+            catch (FormatException)
             {
                 return false;
             }

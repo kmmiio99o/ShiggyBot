@@ -1,13 +1,11 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Globalization;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Features
 {
-    public class PresenceFeature : IDisposable
+    internal sealed class PresenceFeature : IDisposable
     {
         private readonly DiscordSocketClient _client;
         private readonly string _status;
@@ -15,18 +13,18 @@ namespace ShiggyBot.Features
         private Timer? _timer;
         private int _index;
 
-        private readonly ActivityType[] _activities = new[]
-        {
+        private readonly ActivityType[] _activities =
+        [
             ActivityType.Playing,
             ActivityType.Listening,
             ActivityType.Watching
-        };
+        ];
 
         public PresenceFeature(DiscordSocketClient client, IConfiguration config)
         {
             _client = client;
             _status = config["PRESENCE_STATUS"] ?? "Online";
-            _interval = int.Parse(config["PRESENCE_INTERVAL"] ?? "300") * 1000;
+            _interval = int.Parse(config["PRESENCE_INTERVAL"] ?? "300", CultureInfo.InvariantCulture) * 1000;
 
             _client.Ready += OnReadyAsync;
         }
@@ -41,15 +39,19 @@ namespace ShiggyBot.Features
         {
             try
             {
-                var activity = new Game("ShiggyCord", _activities[_index % _activities.Length]);
-                var status = Enum.Parse<UserStatus>(_status, true);
-                await _client.SetActivityAsync(activity);
-                await _client.SetStatusAsync(status);
+                Game activity = new("ShiggyCord", _activities[_index % _activities.Length]);
+                UserStatus status = Enum.Parse<UserStatus>(_status, true);
+                await _client.SetActivityAsync(activity).ConfigureAwait(false);
+                await _client.SetStatusAsync(status).ConfigureAwait(false);
                 _index++;
             }
-            catch
+            catch (HttpRequestException)
             {
                 // Ignore presence update errors
+            }
+            catch (TaskCanceledException)
+            {
+                // Ignore presence update timeout errors
             }
         }
 
@@ -57,6 +59,7 @@ namespace ShiggyBot.Features
         {
             _timer?.Dispose();
             _client.Ready -= OnReadyAsync;
+            GC.SuppressFinalize(this);
         }
     }
 }

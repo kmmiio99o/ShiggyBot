@@ -1,13 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace ShiggyBot.Services
 {
-    public class PluginService
+    internal sealed class PluginService : IDisposable
     {
         private readonly HttpClient _http;
         private const string PluginDataUrl = "https://raw.githubusercontent.com/Purple-EyeZ/Plugins-List/main/src/plugins-data.json";
@@ -25,25 +20,29 @@ namespace ShiggyBot.Services
         public async Task<PluginResult?> SearchPluginAsync(string query)
         {
             if (string.IsNullOrWhiteSpace(query))
+            {
                 return null;
+            }
 
             try
             {
-                var plugins = await GetAllPluginsAsync();
+                List<PluginResult>? plugins = await GetAllPluginsAsync().ConfigureAwait(false);
                 if (plugins == null || plugins.Count == 0)
+                {
                     return null;
+                }
 
                 PluginResult? bestMatch = null;
                 int bestDistance = int.MaxValue;
                 const int maxDistance = 5;
 
-                foreach (var plugin in plugins)
+                foreach (PluginResult plugin in plugins)
                 {
                     // Check both name and description for matches
-                    var nameDistance = LevenshteinDistance(plugin.Name.ToLower(), query.ToLower());
-                    var descriptionDistance = LevenshteinDistance(plugin.Description.ToLower(), query.ToLower());
+                    int nameDistance = LevenshteinDistance(plugin.Name.ToUpperInvariant(), query.ToUpperInvariant());
+                    int descriptionDistance = LevenshteinDistance(plugin.Description.ToUpperInvariant(), query.ToUpperInvariant());
 
-                    var distance = Math.Min(nameDistance, descriptionDistance);
+                    int distance = Math.Min(nameDistance, descriptionDistance);
 
                     if (distance < bestDistance && distance <= maxDistance)
                     {
@@ -53,14 +52,21 @@ namespace ShiggyBot.Services
 
                     // Exact match - return immediately
                     if (plugin.Name.Equals(query, StringComparison.OrdinalIgnoreCase))
+                    {
                         return plugin;
+                    }
                 }
 
                 return bestMatch;
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                Console.WriteLine($"Error searching plugins: {ex.Message}");
+                Utils.Logger.Error($"Error searching plugins: {ex.Message}", ex);
+                return null;
+            }
+            catch (TaskCanceledException ex)
+            {
+                Utils.Logger.Error($"Plugin search timed out: {ex.Message}", ex);
                 return null;
             }
         }
@@ -68,48 +74,67 @@ namespace ShiggyBot.Services
         public async Task<List<PluginResult>> SearchPluginsAsync(string query)
         {
             if (string.IsNullOrWhiteSpace(query))
-                return new List<PluginResult>();
+            {
+                return [];
+            }
 
             try
             {
-                var plugins = await GetAllPluginsAsync();
+                List<PluginResult>? plugins = await GetAllPluginsAsync().ConfigureAwait(false);
                 if (plugins == null)
-                    return new List<PluginResult>();
-
-                var query_lower = query.ToLower();
-                var results = new List<(PluginResult plugin, int score)>();
-
-                foreach (var plugin in plugins)
                 {
-                    var score = 0;
+                    return [];
+                }
+
+                string query_lower = query.ToUpperInvariant();
+                List<(PluginResult plugin, int score)> results = [];
+
+                foreach (PluginResult plugin in plugins)
+                {
+                    int score = 0;
 
                     // Exact name match
                     if (plugin.Name.Equals(query, StringComparison.OrdinalIgnoreCase))
+                    {
                         score += 1000;
+                    }
 
                     // Partial name match
-                    if (plugin.Name.ToLower().Contains(query_lower))
+                    if (plugin.Name.ToUpperInvariant().Contains(query_lower, StringComparison.OrdinalIgnoreCase))
+                    {
                         score += 500;
+                    }
 
                     // Description contains query
-                    if (plugin.Description.ToLower().Contains(query_lower))
+                    if (plugin.Description.ToUpperInvariant().Contains(query_lower, StringComparison.OrdinalIgnoreCase))
+                    {
                         score += 100;
+                    }
 
                     if (score > 0)
+                    {
                         results.Add((plugin, score));
+                    }
                 }
 
                 // Sort by score and take top 10 results
-                return results
-                    .OrderByDescending(x => x.score)
-                    .Take(10)
-                    .Select(x => x.plugin)
-                    .ToList();
+                return
+                [
+                    .. results
+                         .OrderByDescending(x => x.score)
+                         .Take(10)
+                         .Select(x => x.plugin)
+                ];
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                Console.WriteLine($"Error searching plugins: {ex.Message}");
-                return new List<PluginResult>();
+                Utils.Logger.Error($"Error parsing plugin data: {ex.Message}", ex);
+                return [];
+            }
+            catch (HttpRequestException ex)
+            {
+                Utils.Logger.Error($"Error searching plugins: {ex.Message}", ex);
+                return [];
             }
         }
 
@@ -117,76 +142,93 @@ namespace ShiggyBot.Services
         {
             // Return cached plugins if still valid
             if (_cachedPlugins != null && DateTime.UtcNow < _cacheExpiry)
+            {
                 return _cachedPlugins;
+            }
 
             try
             {
-                var json = await _http.GetStringAsync(PluginDataUrl);
+                string json = await _http.GetStringAsync(new Uri(PluginDataUrl)).ConfigureAwait(false);
                 _cachedPlugins = ParsePluginsJson(json);
                 _cacheExpiry = DateTime.UtcNow.AddMinutes(CacheMinutes);
                 return _cachedPlugins;
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                Console.WriteLine($"Error fetching plugins from {PluginDataUrl}: {ex.Message}");
+                Utils.Logger.Error($"Error parsing plugins JSON: {ex.Message}", ex);
+                return _cachedPlugins; // Return cached data if available
+            }
+            catch (HttpRequestException ex)
+            {
+                Utils.Logger.Error($"Error fetching plugins from {PluginDataUrl}: {ex.Message}", ex);
                 return _cachedPlugins; // Return cached data if available
             }
         }
 
-        private List<PluginResult> ParsePluginsJson(string json)
+        public void Dispose()
         {
-            var plugins = new List<PluginResult>();
+            _http?.Dispose();
+            GC.SuppressFinalize(this);
+        }
+
+        private static List<PluginResult> ParsePluginsJson(string json)
+        {
+            List<PluginResult> plugins = [];
 
             try
             {
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement;
 
                 if (root.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var plugin in root.EnumerateArray())
+                    foreach (JsonElement plugin in root.EnumerateArray())
                     {
                         try
                         {
-                            var authorsArray = new List<string>();
-                            if (plugin.TryGetProperty("authors", out var authorsElement) && authorsElement.ValueKind == JsonValueKind.Array)
+                            List<string> authorsArray = [];
+                            if (plugin.TryGetProperty("authors", out JsonElement authorsElement) && authorsElement.ValueKind == JsonValueKind.Array)
                             {
-                                foreach (var author in authorsElement.EnumerateArray())
+                                foreach (JsonElement author in authorsElement.EnumerateArray())
                                 {
                                     if (author.GetString() is string authorName)
+                                    {
                                         authorsArray.Add(authorName);
+                                    }
                                 }
                             }
 
-                            var result = new PluginResult
+                            PluginResult result = new()
                             {
-                                Name = plugin.TryGetProperty("name", out var nameElement)
+                                Name = plugin.TryGetProperty("name", out JsonElement nameElement)
                                     ? nameElement.GetString() ?? "Unknown"
                                     : "Unknown",
-                                Description = plugin.TryGetProperty("description", out var descElement)
+                                Description = plugin.TryGetProperty("description", out JsonElement descElement)
                                     ? descElement.GetString() ?? "No description"
                                     : "No description",
-                                Status = plugin.TryGetProperty("status", out var statusElement)
+                                Status = plugin.TryGetProperty("status", out JsonElement statusElement)
                                     ? statusElement.GetString() ?? "unknown"
                                     : "unknown",
-                                SourceUrl = plugin.TryGetProperty("sourceUrl", out var sourceElement)
+                                SourceUrl = plugin.TryGetProperty("sourceUrl", out JsonElement sourceElement)
                                     ? sourceElement.GetString() ?? ""
                                     : "",
-                                InstallUrl = plugin.TryGetProperty("installUrl", out var installElement)
+                                InstallUrl = plugin.TryGetProperty("installUrl", out JsonElement installElement)
                                     ? installElement.GetString() ?? ""
                                     : "",
-                                WarningMessage = plugin.TryGetProperty("warningMessage", out var warningElement)
+                                WarningMessage = plugin.TryGetProperty("warningMessage", out JsonElement warningElement)
                                     ? warningElement.GetString() ?? ""
                                     : "",
                                 Authors = authorsArray
                             };
 
                             if (!string.IsNullOrWhiteSpace(result.Name))
+                            {
                                 plugins.Add(result);
+                            }
                         }
-                        catch (Exception ex)
+                        catch (InvalidOperationException ex)
                         {
-                            Console.WriteLine($"Error parsing individual plugin: {ex.Message}");
+                            Utils.Logger.Error($"Error parsing individual plugin: {ex.Message}", ex);
                             continue;
                         }
                     }
@@ -194,47 +236,57 @@ namespace ShiggyBot.Services
 
                 return plugins;
             }
-            catch (Exception ex)
+            catch (JsonException ex)
             {
-                Console.WriteLine($"Error parsing JSON: {ex.Message}");
+                Utils.Logger.Error($"Error parsing JSON: {ex.Message}", ex);
                 return plugins;
             }
         }
 
         private static int LevenshteinDistance(string s1, string s2)
         {
-            if (s1.Length == 0) return s2.Length;
-            if (s2.Length == 0) return s1.Length;
+            if (s1.Length == 0)
+            {
+                return s2.Length;
+            }
+            if (s2.Length == 0)
+            {
+                return s1.Length;
+            }
 
-            var d = new int[s1.Length + 1, s2.Length + 1];
+            int[][] d = new int[s1.Length + 1][];
+            for (int i = 0; i <= s1.Length; i++)
+            {
+                d[i] = new int[s2.Length + 1];
+            }
 
             for (int i = 0; i <= s1.Length; i++)
-                d[i, 0] = i;
+            {
+                d[i][0] = i;
+            }
 
             for (int j = 0; j <= s2.Length; j++)
-                d[0, j] = j;
+            {
+                d[0][j] = j;
+            }
 
             for (int i = 1; i <= s1.Length; i++)
             {
                 for (int j = 1; j <= s2.Length; j++)
                 {
-                    var cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
+                    int cost = (s1[i - 1] == s2[j - 1]) ? 0 : 1;
 
-                    d[i, j] = Math.Min(
-                        Math.Min(
-                            d[i - 1, j] + 1,
-                            d[i, j - 1] + 1
-                        ),
-                        d[i - 1, j - 1] + cost
-                    );
+                    d[i][j] = Math.Min(
+                        Math.Min(d[i - 1][j] + 1, d[i][j - 1] + 1),
+                        d[i - 1][j - 1] + cost);
                 }
             }
 
-            return d[s1.Length, s2.Length];
+            return d[s1.Length][s2.Length];
         }
     }
 
-    public class PluginResult
+    internal sealed class PluginResult
     {
         public string Name { get; set; } = "";
 
@@ -248,6 +300,6 @@ namespace ShiggyBot.Services
 
         public string WarningMessage { get; set; } = "";
 
-        public List<string> Authors { get; set; } = new();
+        public List<string> Authors { get; set; } = [];
     }
 }

@@ -7,6 +7,10 @@
     <Nullable>enable</Nullable>
     <AssemblyName>ShiggyBot</AssemblyName>
     <RootNamespace>ShiggyBot</RootNamespace>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisMode>All</AnalysisMode>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

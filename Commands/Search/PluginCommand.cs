@@ -1,27 +1,17 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Discord;
+using Discord.Rest;
 using Discord.WebSocket;
 using ShiggyBot.Services;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Search
 {
-    public class PluginCommand : ICommand
+    internal sealed class PluginCommand(PluginService pluginService) : ICommand
     {
-        private readonly PluginService _pluginService;
-
         public string Name => "plugin";
         public string Description => "Search for Discord plugins and extensions";
         public string Category => "Search";
-        public string[] Aliases => new[] { "plugins", "plg", "plug" };
-
-        public PluginCommand(PluginService pluginService)
-        {
-            _pluginService = pluginService ?? throw new ArgumentNullException(nameof(pluginService));
-        }
+        public string[] Aliases => ["plugins", "plg", "plug"];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
@@ -30,76 +20,87 @@ namespace ShiggyBot.Commands.Search
                 // Validate arguments
                 if (args.Length == 0)
                 {
-                    var errEmbed = new EmbedBuilder
+                    EmbedBuilder errEmbed = new()
                     {
                         Title = "Error",
                         Description = "Please provide a plugin name to search.",
                         Color = new Color(0xE74C3C)
                     };
                     errEmbed.AddField("Usage", "`plugin <name>`", inline: false);
-                    await message.Channel.SendMessageAsync(embed: errEmbed.Build());
+                    await message.Channel.SendMessageAsync(embed: errEmbed.Build()).ConfigureAwait(false);
                     return;
                 }
 
                 // Search for plugin
-                var query = string.Join(" ", args);
-                var searchEmbed = new EmbedBuilder
+                string query = string.Join(" ", args);
+                EmbedBuilder searchEmbed = new()
                 {
                     Title = "🔌 Plugin Search",
                     Description = $"Searching for: **{query}**",
                     Color = new Color(0x3498DB)
                 };
                 searchEmbed.AddField("Status", "⏳ Searching...", inline: false);
-                var statusMessage = await message.Channel.SendMessageAsync(embed: searchEmbed.Build());
+                RestUserMessage statusMessage = await message.Channel.SendMessageAsync(embed: searchEmbed.Build()).ConfigureAwait(false);
 
                 try
                 {
-                    var result = await _pluginService.SearchPluginAsync(query);
+                    PluginResult? result = await pluginService.SearchPluginAsync(query).ConfigureAwait(false);
 
                     if (result != null)
                     {
-                        await statusMessage.DeleteAsync();
+                        await statusMessage.DeleteAsync().ConfigureAwait(false);
                         // Register ephemeral install handler for this result
                         EphemeralButtonService.Register($"plugin_install_{result.Name}", async (component) =>
                         {
                             if (string.IsNullOrWhiteSpace(result.InstallUrl))
                             {
-                                await component.RespondAsync("Install link not available.", ephemeral: true);
+                                await component.RespondAsync("Install link not available.", ephemeral: true).ConfigureAwait(false);
                                 return;
                             }
-                            var embed = new EmbedBuilder
+                            EmbedBuilder embed = new()
                             {
                                 Title = $"📥 Install {result.Name}",
                                 Description = $"[Click here to install]({result.InstallUrl})",
                                 Color = new Color(0x27AE60),
-                                Url = result.InstallUrl
+                                Url = result.InstallUrl,
+                                Footer = new EmbedFooterBuilder { Text = "This message is only visible to you" }
                             };
-                            embed.Footer = new EmbedFooterBuilder { Text = "This message is only visible to you" };
-                            await component.RespondAsync(embed: embed.Build(), ephemeral: true);
+
+                            await component.RespondAsync(embed: embed.Build(), ephemeral: true).ConfigureAwait(false);
                         });
-                        await HandleSuccessfulSearchAsync(message, result);
+                        await HandleSuccessfulSearchAsync(message, result).ConfigureAwait(false);
                     }
                     else
                     {
-                        await statusMessage.ModifyAsync(x => x.Embed = BuildNotFoundEmbed(query));
+                        await statusMessage.ModifyAsync(x => x.Embed = BuildNotFoundEmbed(query)).ConfigureAwait(false);
                     }
                 }
-                catch (Exception ex)
+                catch (HttpRequestException ex)
                 {
                     await statusMessage.ModifyAsync(x => x.Embed =
-                        EmbedHelper.BuildErrorEmbed($"Search failed: {ex.Message}"));
+                        EmbedHelper.BuildErrorEmbed($"Search failed: {ex.Message}")).ConfigureAwait(false);
+                }
+                catch (TaskCanceledException ex)
+                {
+                    await statusMessage.ModifyAsync(x => x.Embed =
+                        EmbedHelper.BuildErrorEmbed($"Search timed out: {ex.Message}")).ConfigureAwait(false);
                 }
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
                 await message.Channel.SendMessageAsync(
-                    embed: EmbedHelper.BuildErrorEmbed($"An error occurred: {ex.Message}"));
+                    embed: EmbedHelper.BuildErrorEmbed($"An error occurred: {ex.Message}")).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException ex)
+            {
+                await message.Channel.SendMessageAsync(
+                    embed: EmbedHelper.BuildErrorEmbed($"Request timed out: {ex.Message}")).ConfigureAwait(false);
             }
         }
 
-        private async Task HandleSuccessfulSearchAsync(SocketUserMessage message, PluginResult result)
+        private static async Task HandleSuccessfulSearchAsync(SocketUserMessage message, PluginResult result)
         {
-            var embed = new EmbedBuilder
+            EmbedBuilder embed = new()
             {
                 Title = $"🔌 {result.Name}",
                 Description = result.Description,
@@ -107,7 +108,7 @@ namespace ShiggyBot.Commands.Search
             };
 
             // Add status field with emoji
-            var statusEmoji = GetStatusEmoji(result.Status);
+            string statusEmoji = GetStatusEmoji(result.Status);
             embed.AddField("Status", $"{statusEmoji} {result.Status}", inline: true);
 
             // Add authors if available
@@ -123,7 +124,7 @@ namespace ShiggyBot.Commands.Search
             }
 
             // Build buttons
-            var componentBuilder = new ComponentBuilder();
+            ComponentBuilder componentBuilder = new();
 
             // Add Install button
             if (!string.IsNullOrWhiteSpace(result.InstallUrl))
@@ -139,12 +140,12 @@ namespace ShiggyBot.Commands.Search
             }
 
             // Send the main plugin info embed with buttons
-            await message.Channel.SendMessageAsync(embed: embed.Build(), components: componentBuilder.Build());
+            await message.Channel.SendMessageAsync(embed: embed.Build(), components: componentBuilder.Build()).ConfigureAwait(false);
         }
 
-        private Embed BuildNotFoundEmbed(string query)
+        private static Embed BuildNotFoundEmbed(string query)
         {
-            var embed = new EmbedBuilder
+            EmbedBuilder embed = new()
             {
                 Title = "🔌 Plugin Not Found",
                 Description = $"Could not find a plugin matching **{query}**",
@@ -165,9 +166,9 @@ namespace ShiggyBot.Commands.Search
             return embed.Build();
         }
 
-        private string GetStatusEmoji(string status)
+        private static string GetStatusEmoji(string status)
         {
-            return status?.ToLower() switch
+            return status?.ToUpperInvariant() switch
             {
                 "working" => "✅",
                 "warning" => "⚠️",
@@ -176,9 +177,9 @@ namespace ShiggyBot.Commands.Search
             };
         }
 
-        private Color GetStatusColor(string status)
+        private static Color GetStatusColor(string status)
         {
-            return status?.ToLower() switch
+            return status?.ToUpperInvariant() switch
             {
                 "working" => new Color(0x27AE60),      // Green
                 "warning" => new Color(0xF39C12),      // Orange

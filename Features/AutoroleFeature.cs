@@ -1,11 +1,9 @@
-using System.Threading.Tasks;
-using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Features
 {
-    public class AutoroleFeature
+    internal sealed class AutoroleFeature
     {
         private readonly DiscordSocketClient _client;
         private readonly string _welcomeRoleId;
@@ -20,17 +18,15 @@ namespace ShiggyBot.Features
         private async Task OnUserJoinedAsync(SocketGuildUser user)
         {
             if (!ulong.TryParse(_welcomeRoleId, out ulong roleId))
+            {
                 return;
-
-            var role = user.Guild.GetRole(roleId);
-            if (role == null)
-                return;
+            }
 
             try
             {
-                await user.AddRoleAsync(role);
+                await user.AddRoleAsync(roleId).ConfigureAwait(false);
             }
-            catch
+            catch (HttpRequestException)
             {
                 // Silently ignore if bot lacks permissions
             }
