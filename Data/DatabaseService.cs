@@ -37,6 +37,11 @@ namespace ShiggyBot.Data
                     GuildId TEXT NOT NULL,
                     CommandName TEXT NOT NULL,
                     PRIMARY KEY (GuildId, CommandName)
+                );
+
+                CREATE TABLE IF NOT EXISTS GuildConfig (
+                    GuildId TEXT NOT NULL PRIMARY KEY,
+                    WelcomeRoleId TEXT
                 )
             ";
             await command.ExecuteNonQueryAsync().ConfigureAwait(false);
@@ -136,6 +141,29 @@ namespace ShiggyBot.Data
                 commands.Add(reader.GetString(0));
             }
             return commands;
+        }
+
+        public async Task SetWelcomeRoleAsync(ulong guildId, ulong roleId)
+        {
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO GuildConfig (GuildId, WelcomeRoleId)
+                VALUES ($guildId, $roleId)
+                ON CONFLICT(GuildId) DO UPDATE SET WelcomeRoleId = $roleId
+            ";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$roleId", roleId.ToString(CultureInfo.InvariantCulture));
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+
+        public async Task<ulong?> GetWelcomeRoleAsync(ulong guildId)
+        {
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "SELECT WelcomeRoleId FROM GuildConfig WHERE GuildId = $guildId";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+
+            string? result = await command.ExecuteScalarAsync().ConfigureAwait(false) as string;
+            return result is not null && ulong.TryParse(result, CultureInfo.InvariantCulture, out ulong roleId) ? roleId : null;
         }
 
         public void Dispose()

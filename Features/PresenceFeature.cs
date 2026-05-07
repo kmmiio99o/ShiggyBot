@@ -2,6 +2,7 @@ using System.Globalization;
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
+using ShiggyBot.Services;
 
 namespace ShiggyBot.Features
 {
@@ -10,21 +11,24 @@ namespace ShiggyBot.Features
         private readonly DiscordSocketClient _client;
         private readonly string _status;
         private readonly int _interval;
+        private readonly GitHubStatsService _gitHub;
         private Timer? _timer;
         private int _index;
 
-        private readonly ActivityType[] _activities =
+        private static readonly (string Text, ActivityType Type)[] Templates =
         [
-            ActivityType.Playing,
-            ActivityType.Listening,
-            ActivityType.Watching
+            ("⭐ {0} stars",                        ActivityType.Watching),
+            ("Forks: {1}",                           ActivityType.Playing),
+            ("{2} open issues",                     ActivityType.Watching),
+            ("⭐{0} | Forks: {1}",                  ActivityType.Playing),
         ];
 
-        public PresenceFeature(DiscordSocketClient client, IConfiguration config)
+        public PresenceFeature(DiscordSocketClient client, IConfiguration config, GitHubStatsService gitHub)
         {
             _client = client;
             _status = config["PRESENCE_STATUS"] ?? "Online";
             _interval = int.Parse(config["PRESENCE_INTERVAL"] ?? "300", CultureInfo.InvariantCulture) * 1000;
+            _gitHub = gitHub;
 
             _client.Ready += OnReadyAsync;
         }
@@ -39,9 +43,12 @@ namespace ShiggyBot.Features
         {
             try
             {
-                Game activity = new("ShiggyCord", _activities[_index % _activities.Length]);
+                RepoStats s = _gitHub.Stats;
+                (string text, ActivityType type) = Templates[_index % Templates.Length];
+                string message = string.Format(CultureInfo.InvariantCulture, text, s.Stars, s.Forks, s.OpenIssues);
+
                 UserStatus status = Enum.Parse<UserStatus>(_status, true);
-                await _client.SetActivityAsync(activity).ConfigureAwait(false);
+                await _client.SetActivityAsync(new Game(message, type)).ConfigureAwait(false);
                 await _client.SetStatusAsync(status).ConfigureAwait(false);
                 _index++;
             }

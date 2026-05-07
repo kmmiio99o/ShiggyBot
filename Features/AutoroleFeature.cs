@@ -1,30 +1,31 @@
 using Discord.WebSocket;
-using Microsoft.Extensions.Configuration;
+using ShiggyBot.Data;
 
 namespace ShiggyBot.Features
 {
     internal sealed class AutoroleFeature
     {
         private readonly DiscordSocketClient _client;
-        private readonly string _welcomeRoleId;
+        private readonly DatabaseService _db;
 
-        public AutoroleFeature(DiscordSocketClient client, IConfiguration config)
+        public AutoroleFeature(DiscordSocketClient client, DatabaseService db)
         {
             _client = client;
-            _welcomeRoleId = config["WELCOME_ROLE_ID"] ?? "1427396865711673484";
+            _db = db;
             _client.UserJoined += OnUserJoinedAsync;
         }
 
         private async Task OnUserJoinedAsync(SocketGuildUser user)
         {
-            if (!ulong.TryParse(_welcomeRoleId, out ulong roleId))
+            ulong? roleId = await _db.GetWelcomeRoleAsync(user.Guild.Id).ConfigureAwait(false);
+            if (roleId is null or 0)
             {
                 return;
             }
 
             try
             {
-                await user.AddRoleAsync(roleId).ConfigureAwait(false);
+                await user.AddRoleAsync(roleId.Value).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {

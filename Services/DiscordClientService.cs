@@ -19,6 +19,7 @@ namespace ShiggyBot.Services
         private readonly BanCheckService _banCheck;
         private AutoroleFeature? _autorole;
         private PresenceFeature? _presence;
+        private GitHubStatsService? _gitHubStats;
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
         private readonly WebhookLogger? _webhookLogger;
@@ -83,9 +84,10 @@ namespace ShiggyBot.Services
 
             // Initialize features
             Logger.Info("[STARTUP] Initializing features...");
-            _autorole = new(_client, _appConfig);
+            _autorole = new(_client, _db);
             Logger.Info("[STARTUP] Autorole feature loaded");
-            _presence = new(_client, _appConfig);
+            _gitHubStats = new();
+            _presence = new(_client, _appConfig, _gitHubStats);
             Logger.Info("[STARTUP] Presence feature loaded");
             _codePreview = new(_client);
             Logger.Info("[STARTUP] Code preview feature loaded");
@@ -244,6 +246,7 @@ namespace ShiggyBot.Services
             _codePreview?.Unregister();
             _commitPreview?.Unregister();
             _presence?.Dispose();
+            _gitHubStats?.Dispose();
             _banCheck?.Stop();
             _banCheck?.Dispose();
             _commandHandler?.Dispose();

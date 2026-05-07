@@ -58,6 +58,7 @@ namespace ShiggyBot.Services
             Register(new NukeCommand());
             Register(new DisableCommand(_db));
             Register(new EnableCommand(_db));
+            Register(new SetWelcomeCommand(_db));
 
             // Search Commands
             Register(new PluginCommand(_pluginService));
