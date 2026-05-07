@@ -15,15 +15,9 @@ namespace ShiggyBot.Commands.Moderation
         {
             ArgumentNullException.ThrowIfNull(message);
             ArgumentNullException.ThrowIfNull(args);
-            if (message.Channel is not SocketGuildChannel)
-            {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("This command can only be used in a server.")).ConfigureAwait(false);
-                return;
-            }
 
-            if (!((SocketGuildUser)message.Author).GuildPermissions.ManageMessages)
+            if (!await PermissionHelper.RequirePermissionAsync(message, GuildPermission.ManageMessages).ConfigureAwait(false))
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("You need ManageMessages permission to use this command.")).ConfigureAwait(false);
                 return;
             }
 

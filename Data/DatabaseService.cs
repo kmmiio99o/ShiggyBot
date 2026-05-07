@@ -31,6 +31,12 @@ namespace ShiggyBot.Data
                     UnbanTime TEXT NOT NULL,
                     Reason TEXT,
                     ModeratorId TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS DisabledCommands (
+                    GuildId TEXT NOT NULL,
+                    CommandName TEXT NOT NULL,
+                    PRIMARY KEY (GuildId, CommandName)
                 )
             ";
             await command.ExecuteNonQueryAsync().ConfigureAwait(false);
@@ -84,6 +90,52 @@ namespace ShiggyBot.Data
                 });
             }
             return expiredBans;
+        }
+
+        public async Task DisableCommandAsync(ulong guildId, string commandName)
+        {
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = @"
+                INSERT OR IGNORE INTO DisabledCommands (GuildId, CommandName)
+                VALUES ($guildId, $commandName)
+            ";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$commandName", commandName.ToUpperInvariant());
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+
+        public async Task EnableCommandAsync(ulong guildId, string commandName)
+        {
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "DELETE FROM DisabledCommands WHERE GuildId = $guildId AND CommandName = $commandName";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$commandName", commandName.ToUpperInvariant());
+            await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+        }
+
+        public async Task<bool> IsCommandDisabledAsync(ulong guildId, string commandName)
+        {
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(1) FROM DisabledCommands WHERE GuildId = $guildId AND CommandName = $commandName";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$commandName", commandName.ToUpperInvariant());
+            long count = (long)(await command.ExecuteScalarAsync().ConfigureAwait(false))!;
+            return count > 0;
+        }
+
+        public async Task<List<string>> GetDisabledCommandsAsync(ulong guildId)
+        {
+            List<string> commands = [];
+            SqliteCommand command = _connection.CreateCommand();
+            command.CommandText = "SELECT CommandName FROM DisabledCommands WHERE GuildId = $guildId ORDER BY CommandName";
+            command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
+
+            using SqliteDataReader reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+            while (await reader.ReadAsync().ConfigureAwait(false))
+            {
+                commands.Add(reader.GetString(0));
+            }
+            return commands;
         }
 
         public void Dispose()

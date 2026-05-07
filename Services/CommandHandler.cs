@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using ShiggyBot.Commands;
 using ShiggyBot.Commands.Utility;
 using ShiggyBot.Commands.Moderation;
+using ShiggyBot.Commands.Core;
 using ShiggyBot.Commands.Search;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
@@ -54,6 +55,9 @@ namespace ShiggyBot.Services
             Register(new PurgeCommand());
             Register(new AddRoleCommand());
             Register(new RemoveRoleCommand());
+            Register(new NukeCommand());
+            Register(new DisableCommand(_db));
+            Register(new EnableCommand(_db));
 
             // Search Commands
             Register(new PluginCommand(_pluginService));
@@ -120,6 +124,15 @@ namespace ShiggyBot.Services
             if (!_commands.TryGetValue(name, out ICommand? command))
             {
                 _ = await userMessage.Channel.SendMessageAsync("Unknown command. Use " + Prefix + "help for details.").ConfigureAwait(false);
+                return;
+            }
+
+            if (userMessage.Channel is SocketGuildChannel guildChannel &&
+                command.Name != "disable" &&
+                command.Name != "enable" &&
+                await _db.IsCommandDisabledAsync(guildChannel.Guild.Id, name).ConfigureAwait(false))
+            {
+                _ = await userMessage.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed($"Command `{command.Name}` is disabled in this server.")).ConfigureAwait(false);
                 return;
             }
 
