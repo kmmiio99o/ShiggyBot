@@ -27,7 +27,7 @@ namespace ShiggyBot.Commands.Utility
         /// <summary>
         /// Gets the aliases for the command.
         /// </summary>
-        public string[] Aliases => ["notes"];
+        public string[] Aliases => [];
 
         private static readonly Dictionary<string, string> Notes = new()
         {

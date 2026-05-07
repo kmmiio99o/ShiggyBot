@@ -10,7 +10,7 @@ namespace ShiggyBot.Commands.Moderation
         public string Name => "nuke";
         public string Description => "Clone and delete a channel to remove all messages (Administrator only)";
         public string Category => "Moderation";
-        public string[] Aliases => ["channelnuke"];
+        public string[] Aliases => [];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {

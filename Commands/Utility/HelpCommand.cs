@@ -28,7 +28,7 @@ namespace ShiggyBot.Commands.Utility
         /// <summary>
         /// Gets the aliases for the command.
         /// </summary>
-        public string[] Aliases => ["commands"];
+        public string[] Aliases => [];
 
         /// <summary>
         /// Executes the help command.

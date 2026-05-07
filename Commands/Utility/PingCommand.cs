@@ -27,7 +27,7 @@ namespace ShiggyBot.Commands.Utility
         /// <summary>
         /// Gets the aliases for the command.
         /// </summary>
-        public string[] Aliases => ["sping"];
+        public string[] Aliases => [];
 
         /// <summary>
         /// Executes the ping command.

@@ -11,7 +11,7 @@ namespace ShiggyBot.Commands.Core
         public string Name => "setwelcome";
         public string Description => "Set the welcome role for new members in this server";
         public string Category => "Core";
-        public string[] Aliases => ["setwelcomerole"];
+        public string[] Aliases => [];
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
