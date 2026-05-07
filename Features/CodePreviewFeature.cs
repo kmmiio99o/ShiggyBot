@@ -267,6 +267,23 @@ namespace ShiggyBot.Features
 
             if (embeds.Count > 0)
             {
+                if (message.Channel is SocketGuildChannel)
+                {
+                    try
+                    {
+                        await ((ITextChannel)message.Channel).ModifyMessageAsync(message.Id, props =>
+                        {
+                            props.Flags = MessageFlags.SuppressEmbeds;
+                        }).ConfigureAwait(false);
+                    }
+                    catch (HttpRequestException)
+                    {
+                    }
+                    catch (InvalidOperationException)
+                    {
+                    }
+                }
+
                 await message.Channel.SendMessageAsync(embeds: [.. embeds]).ConfigureAwait(false);
             }
         }

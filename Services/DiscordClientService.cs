@@ -154,6 +154,11 @@ namespace ShiggyBot.Services
                     return;
                 }
 
+                if (CommitPreviewFeature.TryHandleButton(component))
+                {
+                    return;
+                }
+
                 await component.RespondAsync("This button is no longer available.", ephemeral: true).ConfigureAwait(false);
             }
             catch (InvalidOperationException)
