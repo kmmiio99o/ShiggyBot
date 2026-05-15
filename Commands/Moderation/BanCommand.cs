@@ -24,8 +24,15 @@ namespace ShiggyBot.Commands.Moderation
             }
 
             SocketGuildChannel guildChannel = (SocketGuildChannel)message.Channel;
+            SocketGuild guild = guildChannel.Guild;
 
-            if (args.Length == 0)
+            IGuildUser? user = message.ReferencedMessage is not null
+                ? await PermissionHelper.ResolveRepliedUserAsync(guild, message).ConfigureAwait(false)
+                : null;
+
+            int offset = user is not null ? 0 : 1;
+
+            if (args.Length < offset)
             {
                 EmbedBuilder usageEmbed = new()
                 {
@@ -34,35 +41,35 @@ namespace ShiggyBot.Commands.Moderation
                     Color = new Color(0xFFA500)
                 };
                 _ = usageEmbed.AddField("Usage", "`ban <user> [duration] [reason]`", inline: false);
+                _ = usageEmbed.AddField("Reply Usage", "Reply to a message with `ban [duration] [reason]`", inline: false);
                 _ = usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days (optional)", inline: false);
                 _ = usageEmbed.AddField("Example", "`ban @user 7d Breaking rules`", inline: false);
                 await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            string userArg = args[0];
-            int deleteDays = 0;
-
-            // Check if second arg is a duration
-            TimeSpan? duration = null;
-            int reasonStart = 1;
-            if (args.Length > 1 && TryParseDuration(args[1], out TimeSpan parsedDuration))
+            if (offset == 1)
             {
-                duration = parsedDuration;
-                reasonStart = 2;
+                user = await PermissionHelper.ResolveUserAsync(guild, args[0]).ConfigureAwait(false);
             }
-
-            string reason = args.Length > reasonStart ? string.Join(" ", args, reasonStart, args.Length - reasonStart) : "No reason provided";
-
-            SocketGuild guild = guildChannel.Guild;
-            ulong? userId = EmbedHelper.ParseUserMention(userArg);
-            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
 
             if (user == null)
             {
                 await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
+
+            int deleteDays = 0;
+
+            TimeSpan? duration = null;
+            int reasonStart = offset;
+            if (args.Length > offset && TryParseDuration(args[offset], out TimeSpan parsedDuration))
+            {
+                duration = parsedDuration;
+                reasonStart = offset + 1;
+            }
+
+            string reason = args.Length > reasonStart ? string.Join(" ", args, reasonStart, args.Length - reasonStart) : "No reason provided";
 
             try
             {

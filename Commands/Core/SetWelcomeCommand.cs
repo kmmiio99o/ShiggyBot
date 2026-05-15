@@ -62,10 +62,7 @@ namespace ShiggyBot.Commands.Core
             }
 
             string roleArg = string.Join(" ", args);
-            SocketRole? role = guild.Roles.FirstOrDefault(r =>
-                r.Name == roleArg ||
-                r.Id.ToString(CultureInfo.InvariantCulture) == roleArg ||
-                r.Mention == roleArg);
+            SocketRole? role = PermissionHelper.ResolveRole(guild, roleArg);
 
             if (role == null)
             {

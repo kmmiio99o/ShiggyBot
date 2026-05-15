@@ -1,4 +1,3 @@
-using System.Globalization;
 using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Utils;
@@ -23,8 +22,15 @@ namespace ShiggyBot.Commands.Moderation
             }
 
             SocketGuildChannel guildChannel = (SocketGuildChannel)message.Channel;
+            SocketGuild guild = guildChannel.Guild;
 
-            if (args.Length < 2)
+            IGuildUser? user = message.ReferencedMessage is not null
+                ? await PermissionHelper.ResolveRepliedUserAsync(guild, message).ConfigureAwait(false)
+                : null;
+
+            int offset = user is not null ? 0 : 1;
+
+            if (args.Length < offset + 1)
             {
                 EmbedBuilder usageEmbed = new()
                 {
@@ -33,24 +39,25 @@ namespace ShiggyBot.Commands.Moderation
                     Color = new Color(0xFFA500)
                 };
                 usageEmbed.AddField("Usage", "`removerole <user> <role>`", inline: false);
+                usageEmbed.AddField("Reply Usage", "Reply to a message with `removerole <role>`", inline: false);
                 usageEmbed.AddField("Example", "`removerole @user Member`", inline: false);
                 await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            string userArg = args[0];
-            string roleArg = string.Join(" ", args, 1, args.Length - 1);
-            SocketGuild guild = guildChannel.Guild;
+            if (offset == 1)
+            {
+                user = await PermissionHelper.ResolveUserAsync(guild, args[0]).ConfigureAwait(false);
+            }
 
-            ulong? userId = EmbedHelper.ParseUserMention(userArg);
-            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
-            SocketRole? role = guild.Roles.FirstOrDefault(r => r.Name == roleArg || r.Id.ToString(CultureInfo.InvariantCulture) == roleArg || r.Mention == roleArg);
-
-            if (user == null)
+            if (user is null)
             {
                 await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
+
+            string roleArg = string.Join(" ", args, offset, args.Length - offset);
+            SocketRole? role = PermissionHelper.ResolveRole(guild, roleArg);
 
             if (role == null)
             {

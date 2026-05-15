@@ -23,8 +23,15 @@ namespace ShiggyBot.Commands.Moderation
             }
 
             SocketGuildChannel guildChannel = (SocketGuildChannel)message.Channel;
+            SocketGuild guild = guildChannel.Guild;
 
-            if (args.Length < 2)
+            IGuildUser? user = message.ReferencedMessage is not null
+                ? await PermissionHelper.ResolveRepliedUserAsync(guild, message).ConfigureAwait(false)
+                : null;
+
+            int offset = user is not null ? 0 : 1;
+
+            if (args.Length < offset + 1)
             {
                 EmbedBuilder usageEmbed = new()
                 {
@@ -33,25 +40,26 @@ namespace ShiggyBot.Commands.Moderation
                     Color = new Color(0xFFA500)
                 };
                 usageEmbed.AddField("Usage", "`timeout <user> <duration> [reason]`", inline: false);
+                usageEmbed.AddField("Reply Usage", "Reply to a message with `timeout <duration> [reason]`", inline: false);
                 usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days", inline: false);
                 usageEmbed.AddField("Example", "`timeout @user 10m Breaking rules`", inline: false);
                 await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
                 return;
             }
 
-            string userArg = args[0];
-            string durationArg = args[1];
-            string reason = args.Length > 2 ? string.Join(" ", args, 2, args.Length - 2) : "No reason provided";
-
-            SocketGuild guild = guildChannel.Guild;
-            ulong? userId = EmbedHelper.ParseUserMention(userArg);
-            SocketGuildUser? user = userId.HasValue ? guild.GetUser(userId.Value) : guild.Users.FirstOrDefault(u => u.Username == userArg || u.Id.ToString(CultureInfo.InvariantCulture) == userArg);
+            if (offset == 1)
+            {
+                user = await PermissionHelper.ResolveUserAsync(guild, args[0]).ConfigureAwait(false);
+            }
 
             if (user == null)
             {
                 await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
                 return;
             }
+
+            string durationArg = args[offset];
+            string reason = args.Length > offset + 1 ? string.Join(" ", args, offset + 1, args.Length - (offset + 1)) : "No reason provided";
 
             TimeSpan duration = TimeSpan.FromMinutes(5); // default
             if (durationArg.EndsWith('s'))
