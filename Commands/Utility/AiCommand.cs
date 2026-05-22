@@ -7,45 +7,33 @@ using Microsoft.Extensions.Configuration;
 namespace ShiggyBot.Commands.Utility
 {
     /// <summary>
-    /// Command to chat with AI assistant powered by Gemini.
+    /// Command to chat with an AI assistant powered by Gemini.
     /// </summary>
     internal sealed class AiCommand(IConfiguration config) : ICommand, IDisposable
     {
         private readonly AiService _aiService = new(config);
 
-        /// <summary>
-        /// Disposes the AI service.
-        /// </summary>
+        /// <summary>Disposes the AI service resources.</summary>
         public void Dispose()
         {
             _aiService?.Dispose();
             GC.SuppressFinalize(this);
         }
 
-        /// <summary>
-        /// Gets the name of the command.
-        /// </summary>
+        /// <summary>Gets the command name.</summary>
         public string Name => "ai";
 
-        /// <summary>
-        /// Gets the description of the command.
-        /// </summary>
+        /// <summary>Gets the command description.</summary>
         public string Description => "Chat with AI assistant powered by Gemini";
 
-        /// <summary>
-        /// Gets the category of the command.
-        /// </summary>
+        /// <summary>Gets the command category.</summary>
         public string Category => "Utility";
 
-        /// <summary>
-        /// Gets the aliases for the command.
-        /// </summary>
-        public string[] Aliases => ["gemini", "ask", "clearai"];
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => ["gemini", "ask", "clearai"];
 
-        /// <summary>
-        /// Executes the AI chat command.
-        /// </summary>
-        /// <param name="message">The user message that triggered the command.</param>
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
         /// <param name="args">The command arguments.</param>
         /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)

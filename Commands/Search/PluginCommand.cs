@@ -6,15 +6,35 @@ using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Search
 {
-    internal sealed class PluginCommand(PluginService pluginService) : ICommand
+    /// <summary>
+    /// Command to search for Discord plugins and extensions.
+    /// </summary>
+    internal sealed class PluginCommand : ICommand
     {
-        public string Name => "plugin";
-        public string Description => "Search for Discord plugins and extensions";
-        public string Category => "Search";
-        public string[] Aliases => ["plugins", "plg", "plug"];
+        private readonly PluginService _pluginService;
 
+        internal PluginCommand(PluginService pluginService)
+        {
+            _pluginService = pluginService;
+        }
+
+        /// <summary>Gets the command name.</summary>
+        public string Name => "plugin";
+        /// <summary>Gets the command description.</summary>
+        public string Description => "Search for Discord plugins and extensions";
+        /// <summary>Gets the command category.</summary>
+        public string Category => "Search";
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => ["plugins", "plg", "plug"];
+
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
+        /// <param name="args">The command arguments.</param>
+        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(args);
             try
             {
                 // Validate arguments
@@ -44,7 +64,7 @@ namespace ShiggyBot.Commands.Search
 
                 try
                 {
-                    PluginResult? result = await pluginService.SearchPluginAsync(query).ConfigureAwait(false);
+                    PluginResult? result = await _pluginService.SearchPluginAsync(query).ConfigureAwait(false);
 
                     if (result != null)
                     {

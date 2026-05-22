@@ -6,45 +6,44 @@ using ShiggyBot.Utils;
 namespace ShiggyBot.Commands.Utility
 {
     /// <summary>
-    /// Command to show all available commands with interactive menu.
+    /// Command to show available commands with an interactive menu.
     /// </summary>
-    internal sealed class HelpCommand(CommandHandler commandHandler) : ICommand
+    internal sealed class HelpCommand : ICommand
     {
-        /// <summary>
-        /// Gets the name of the command.
-        /// </summary>
+        private readonly CommandHandler _commandHandler;
+
+        internal HelpCommand(CommandHandler commandHandler)
+        {
+            _commandHandler = commandHandler;
+        }
+
+        /// <summary>Gets the command name.</summary>
         public string Name => "help";
 
-        /// <summary>
-        /// Gets the description of the command.
-        /// </summary>
+        /// <summary>Gets the command description.</summary>
         public string Description => "Show all available commands with interactive menu";
 
-        /// <summary>
-        /// Gets the category of the command.
-        /// </summary>
+        /// <summary>Gets the command category.</summary>
         public string Category => "Utility";
 
-        /// <summary>
-        /// Gets the aliases for the command.
-        /// </summary>
-        public string[] Aliases => [];
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the help command.
-        /// </summary>
-        /// <param name="message">The user message that triggered the command.</param>
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
         /// <param name="args">The command arguments.</param>
         /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
-            string prefix = commandHandler.Prefix;
-            Dictionary<string, List<ICommand>> categories = commandHandler.GetCommandsByCategory();
+            ArgumentNullException.ThrowIfNull(message);
+            ArgumentNullException.ThrowIfNull(args);
+            string prefix = _commandHandler.Prefix;
+            Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
 
             if (args.Length > 0)
             {
                 string cmdName = args[0].ToUpperInvariant();
-                ICommand? command = commandHandler.GetCommandByName(cmdName);
+                ICommand? command = _commandHandler.GetCommandByName(cmdName);
                 if (command != null)
                 {
                     await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildCommandHelpEmbed(command, prefix)).ConfigureAwait(false);

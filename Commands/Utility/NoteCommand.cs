@@ -9,25 +9,17 @@ namespace ShiggyBot.Commands.Utility
     /// </summary>
     internal sealed class NoteCommand : ICommand
     {
-        /// <summary>
-        /// Gets the name of the command.
-        /// </summary>
+        /// <summary>Gets the command name.</summary>
         public string Name => "note";
 
-        /// <summary>
-        /// Gets the description of the command.
-        /// </summary>
+        /// <summary>Gets the command description.</summary>
         public string Description => "Access saved notes and information";
 
-        /// <summary>
-        /// Gets the category of the command.
-        /// </summary>
+        /// <summary>Gets the command category.</summary>
         public string Category => "Utility";
 
-        /// <summary>
-        /// Gets the aliases for the command.
-        /// </summary>
-        public string[] Aliases => [];
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => [];
 
         private static readonly Dictionary<string, string> Notes = new()
         {
@@ -40,10 +32,8 @@ namespace ShiggyBot.Commands.Utility
       { "stuck", "ShiggyCord stuck on loading discord screen\n\nDisable bundle injection in Xposed Recovery Menu (shake your phone). If it fixes the issue, enable it again." },
     };
 
-        /// <summary>
-        /// Executes the note command.
-        /// </summary>
-        /// <param name="message">The user message that triggered the command.</param>
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
         /// <param name="args">The command arguments.</param>
         /// <param name="client">The Discord client instance.</param>
         public Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)

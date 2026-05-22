@@ -6,13 +6,31 @@ using ShiggyBot.Data;
 
 namespace ShiggyBot.Commands.Core
 {
-    internal sealed class SetWelcomeCommand(DatabaseService db) : ICommand
+    /// <summary>
+    /// Command to configure the welcome role for a server.
+    /// </summary>
+    internal sealed class SetWelcomeCommand : ICommand
     {
-        public string Name => "setwelcome";
-        public string Description => "Set the welcome role for new members in this server";
-        public string Category => "Core";
-        public string[] Aliases => [];
+        private readonly DatabaseService _db;
 
+        internal SetWelcomeCommand(DatabaseService db)
+        {
+            _db = db;
+        }
+
+        /// <summary>Gets the command name.</summary>
+        public string Name => "setwelcome";
+        /// <summary>Gets the command description.</summary>
+        public string Description => "Set the welcome role for new members in this server";
+        /// <summary>Gets the command category.</summary>
+        public string Category => "Core";
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => [];
+
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
+        /// <param name="args">The command arguments.</param>
+        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -32,7 +50,7 @@ namespace ShiggyBot.Commands.Core
 
             if (args.Length == 0)
             {
-                ulong? current = await db.GetWelcomeRoleAsync(guild.Id).ConfigureAwait(false);
+                ulong? current = await _db.GetWelcomeRoleAsync(guild.Id).ConfigureAwait(false);
                 string currentStr = "None";
                 if (current is not null and not 0)
                 {
@@ -56,7 +74,7 @@ namespace ShiggyBot.Commands.Core
                 args[0].Equals("none", StringComparison.OrdinalIgnoreCase) ||
                 args[0].Equals("off", StringComparison.OrdinalIgnoreCase))
             {
-                await db.SetWelcomeRoleAsync(guild.Id, 0).ConfigureAwait(false);
+                await _db.SetWelcomeRoleAsync(guild.Id, 0).ConfigureAwait(false);
                 await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildSuccessEmbed("Welcome role has been disabled for this server.")).ConfigureAwait(false);
                 return;
             }
@@ -70,7 +88,7 @@ namespace ShiggyBot.Commands.Core
                 return;
             }
 
-            await db.SetWelcomeRoleAsync(guild.Id, role.Id).ConfigureAwait(false);
+            await _db.SetWelcomeRoleAsync(guild.Id, role.Id).ConfigureAwait(false);
             await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildSuccessEmbed($"Welcome role set to **{role.Name}** for this server.")).ConfigureAwait(false);
         }
     }

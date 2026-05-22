@@ -124,7 +124,6 @@ namespace ShiggyBot.Services
 
             if (!_commands.TryGetValue(name, out ICommand? command))
             {
-                _ = await userMessage.Channel.SendMessageAsync("Unknown command. Use " + Prefix + "help for details.").ConfigureAwait(false);
                 return;
             }
 

@@ -4,13 +4,34 @@ using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
+    /// <summary>
+    /// Command to remove a role from a user.
+    /// </summary>
     internal sealed class RemoveRoleCommand : ICommand
     {
+        /// <summary>
+        /// Gets the command name.
+        /// </summary>
         public string Name => "removerole";
+        /// <summary>
+        /// Gets the command description.
+        /// </summary>
         public string Description => "Remove a role from a user";
+        /// <summary>
+        /// Gets the command category.
+        /// </summary>
         public string Category => "Moderation";
-        public string[] Aliases => [];
+        /// <summary>
+        /// Gets the command aliases.
+        /// </summary>
+        public IReadOnlyList<string> Aliases => [];
 
+        /// <summary>
+        /// Executes the command.
+        /// </summary>
+        /// <param name="message">The message that triggered the command.</param>
+        /// <param name="args">The command arguments.</param>
+        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);

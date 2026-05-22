@@ -9,30 +9,20 @@ namespace ShiggyBot.Commands.Search
     /// </summary>
     internal sealed class GoogleCommand : ICommand
     {
-        /// <summary>
-        /// Gets the name of the command.
-        /// </summary>
+        /// <summary>Gets the command name.</summary>
         public string Name => "google";
 
-        /// <summary>
-        /// Gets the description of the command.
-        /// </summary>
+        /// <summary>Gets the command description.</summary>
         public string Description => "Search Google directly from Discord";
 
-        /// <summary>
-        /// Gets the category of the command.
-        /// </summary>
+        /// <summary>Gets the command category.</summary>
         public string Category => "Search";
 
-        /// <summary>
-        /// Gets the aliases for the command.
-        /// </summary>
-        public string[] Aliases => ["g", "search"];
+        /// <summary>Gets the command aliases.</summary>
+        public IReadOnlyList<string> Aliases => ["g", "search"];
 
-        /// <summary>
-        /// Executes the Google search command.
-        /// </summary>
-        /// <param name="message">The user message that triggered the command.</param>
+        /// <summary>Executes the command.</summary>
+        /// <param name="message">The message that triggered the command.</param>
         /// <param name="args">The command arguments.</param>
         /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)

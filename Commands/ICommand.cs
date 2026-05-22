@@ -7,7 +7,7 @@ namespace ShiggyBot.Commands
         string Name { get; }
         string Description { get; }
         string Category { get; }
-        string[] Aliases { get; }
+        IReadOnlyList<string> Aliases { get; }
         Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client);
     }
 }

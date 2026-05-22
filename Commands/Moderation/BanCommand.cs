@@ -6,13 +6,41 @@ using ShiggyBot.Data;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    internal sealed class BanCommand(DatabaseService db) : ICommand
+    /// <summary>
+    /// Command to ban a user from the server.
+    /// </summary>
+    internal sealed class BanCommand : ICommand
     {
-        public string Name => "ban";
-        public string Description => "Ban a user from the server (supports timed bans)";
-        public string Category => "Moderation";
-        public string[] Aliases => [];
+        private readonly DatabaseService _db;
 
+        internal BanCommand(DatabaseService db)
+        {
+            _db = db;
+        }
+
+        /// <summary>
+        /// Gets the command name.
+        /// </summary>
+        public string Name => "ban";
+        /// <summary>
+        /// Gets the command description.
+        /// </summary>
+        public string Description => "Ban a user from the server (supports timed bans)";
+        /// <summary>
+        /// Gets the command category.
+        /// </summary>
+        public string Category => "Moderation";
+        /// <summary>
+        /// Gets the command aliases.
+        /// </summary>
+        public IReadOnlyList<string> Aliases => [];
+
+        /// <summary>
+        /// Executes the command.
+        /// </summary>
+        /// <param name="message">The message that triggered the command.</param>
+        /// <param name="args">The command arguments.</param>
+        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -79,7 +107,7 @@ namespace ShiggyBot.Commands.Moderation
                 if (duration.HasValue)
                 {
                     DateTime unbanTime = DateTime.UtcNow.Add(duration.Value);
-                    await db.AddTimedBanAsync(guild.Id, user.Id, unbanTime, reason, message.Author.Id).ConfigureAwait(false);
+                    await _db.AddTimedBanAsync(guild.Id, user.Id, unbanTime, reason, message.Author.Id).ConfigureAwait(false);
                 }
 
                 EmbedBuilder embed = new()

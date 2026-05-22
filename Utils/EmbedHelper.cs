@@ -94,7 +94,7 @@ namespace ShiggyBot.Utils
 
             foreach (ICommand cmd in commands)
             {
-                string aliases = cmd.Aliases?.Length > 0 ? $" (Aliases: {string.Join(", ", cmd.Aliases)})" : "";
+                string aliases = cmd.Aliases?.Count > 0 ? $" (Aliases: {string.Join(", ", cmd.Aliases)})" : "";
                 _ = builder.AddField($"{prefix}{cmd.Name}{aliases}", cmd.Description ?? "No description", inline: false);
             }
 
@@ -145,7 +145,7 @@ namespace ShiggyBot.Utils
             _ = builder.AddField("Category", command.Category ?? "Other", inline: true);
             _ = builder.AddField("Usage", $"`{prefix}{command.Name}`", inline: true);
 
-            if (command.Aliases?.Length > 0)
+            if (command.Aliases?.Count > 0)
             {
                 _ = builder.AddField("Aliases", string.Join(", ", command.Aliases.Select(a => $"`{a}`")), inline: false);
             }
