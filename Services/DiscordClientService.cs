@@ -77,12 +77,7 @@ namespace ShiggyBot.Services
                 return;
             }
 
-            Logger.Info("[STARTUP] Logging in to Discord...");
-            await _client.LoginAsync(TokenType.Bot, _config.Token).ConfigureAwait(false);
-            Logger.Info("[STARTUP] Starting Discord client...");
-            await _client.StartAsync().ConfigureAwait(false);
-
-            // Initialize features
+            // Initialize features before connecting so no events are missed
             Logger.Info("[STARTUP] Initializing features...");
             _autorole = new(_client, _db);
             Logger.Info("[STARTUP] Autorole feature loaded");
@@ -93,8 +88,14 @@ namespace ShiggyBot.Services
             Logger.Info("[STARTUP] Code preview feature loaded");
             _commitPreview = new(_client);
             Logger.Info("[STARTUP] Commit preview feature loaded");
+            Logger.Info("[STARTUP] All features initialized.");
 
-            // Start ban check service
+            Logger.Info("[STARTUP] Logging in to Discord...");
+            await _client.LoginAsync(TokenType.Bot, _config.Token).ConfigureAwait(false);
+            Logger.Info("[STARTUP] Starting Discord client...");
+            await _client.StartAsync().ConfigureAwait(false);
+
+            // Start ban check service after client is connected
             _banCheck.Start();
 
             Logger.Info("[STARTUP] All features initialized. Bot is running!");
@@ -120,7 +121,7 @@ namespace ShiggyBot.Services
             Logger.Info($"[READY] Connected to {_client.Guilds.Count} server(s)");
             if (_webhookLogger != null)
             {
-                await _webhookLogger.LogErrorAsync("ShiggyBot shutting down").ConfigureAwait(false);
+                await _webhookLogger.LogInfoAsync("ShiggyBot is ready!").ConfigureAwait(false);
             }
         }
 

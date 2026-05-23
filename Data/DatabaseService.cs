@@ -20,7 +20,7 @@ namespace ShiggyBot.Data
         private async Task InitializeDatabase()
         {
             await _connection.OpenAsync().ConfigureAwait(false);
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText =
             @"
                 CREATE TABLE IF NOT EXISTS TimedBans (
@@ -49,7 +49,7 @@ namespace ShiggyBot.Data
 
         public async Task AddTimedBanAsync(ulong guildId, ulong userId, DateTime unbanTime, string? reason = null, ulong? moderatorId = null)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText =
             @"
                 INSERT INTO TimedBans (GuildId, UserId, BanTime, UnbanTime, Reason, ModeratorId)
@@ -66,7 +66,7 @@ namespace ShiggyBot.Data
 
         public async Task RemoveTimedBanAsync(ulong guildId, ulong userId)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "DELETE FROM TimedBans WHERE GuildId = $guildId AND UserId = $userId";
             command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("$userId", userId.ToString(CultureInfo.InvariantCulture));
@@ -76,7 +76,7 @@ namespace ShiggyBot.Data
         public async Task<List<TimedBan>> GetExpiredBansAsync()
         {
             List<TimedBan> expiredBans = [];
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "SELECT * FROM TimedBans WHERE UnbanTime <= $currentTime";
             command.Parameters.AddWithValue("$currentTime", DateTime.UtcNow.ToString("o"));
 
@@ -99,7 +99,7 @@ namespace ShiggyBot.Data
 
         public async Task DisableCommandAsync(ulong guildId, string commandName)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = @"
                 INSERT OR IGNORE INTO DisabledCommands (GuildId, CommandName)
                 VALUES ($guildId, $commandName)
@@ -111,7 +111,7 @@ namespace ShiggyBot.Data
 
         public async Task EnableCommandAsync(ulong guildId, string commandName)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "DELETE FROM DisabledCommands WHERE GuildId = $guildId AND CommandName = $commandName";
             command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("$commandName", commandName.ToUpperInvariant());
@@ -120,7 +120,7 @@ namespace ShiggyBot.Data
 
         public async Task<bool> IsCommandDisabledAsync(ulong guildId, string commandName)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "SELECT COUNT(1) FROM DisabledCommands WHERE GuildId = $guildId AND CommandName = $commandName";
             command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("$commandName", commandName.ToUpperInvariant());
@@ -131,7 +131,7 @@ namespace ShiggyBot.Data
         public async Task<List<string>> GetDisabledCommandsAsync(ulong guildId)
         {
             List<string> commands = [];
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "SELECT CommandName FROM DisabledCommands WHERE GuildId = $guildId ORDER BY CommandName";
             command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
 
@@ -145,7 +145,7 @@ namespace ShiggyBot.Data
 
         public async Task SetWelcomeRoleAsync(ulong guildId, ulong roleId)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = @"
                 INSERT INTO GuildConfig (GuildId, WelcomeRoleId)
                 VALUES ($guildId, $roleId)
@@ -158,7 +158,7 @@ namespace ShiggyBot.Data
 
         public async Task<ulong?> GetWelcomeRoleAsync(ulong guildId)
         {
-            SqliteCommand command = _connection.CreateCommand();
+            using SqliteCommand command = _connection.CreateCommand();
             command.CommandText = "SELECT WelcomeRoleId FROM GuildConfig WHERE GuildId = $guildId";
             command.Parameters.AddWithValue("$guildId", guildId.ToString(CultureInfo.InvariantCulture));
 

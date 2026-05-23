@@ -1,5 +1,7 @@
+using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Data;
+using ShiggyBot.Utils;
 
 namespace ShiggyBot.Features
 {
@@ -13,6 +15,13 @@ namespace ShiggyBot.Features
             _client = client;
             _db = db;
             _client.UserJoined += OnUserJoinedAsync;
+            _client.GuildAvailable += OnGuildAvailableAsync;
+        }
+
+        public void Unregister()
+        {
+            _client.UserJoined -= OnUserJoinedAsync;
+            _client.GuildAvailable -= OnGuildAvailableAsync;
         }
 
         private async Task OnUserJoinedAsync(SocketGuildUser user)
@@ -23,19 +32,44 @@ namespace ShiggyBot.Features
                 return;
             }
 
-            try
+            await AssignRoleAsync(user, roleId.Value).ConfigureAwait(false);
+        }
+
+        private async Task OnGuildAvailableAsync(SocketGuild guild)
+        {
+            ulong? roleId = await _db.GetWelcomeRoleAsync(guild.Id).ConfigureAwait(false);
+            if (roleId is null or 0)
             {
-                await user.AddRoleAsync(roleId.Value).ConfigureAwait(false);
+                return;
             }
-            catch (HttpRequestException)
+
+            IRole? role = await guild.GetRoleAsync(roleId.Value).ConfigureAwait(false);
+            if (role is null)
             {
-                // Silently ignore if bot lacks permissions
+                return;
+            }
+
+            foreach (SocketGuildUser user in guild.Users)
+            {
+                if (user.Roles.Contains(role))
+                {
+                    continue;
+                }
+
+                await AssignRoleAsync(user, roleId.Value).ConfigureAwait(false);
             }
         }
 
-        public void Unregister()
+        private static async Task AssignRoleAsync(SocketGuildUser user, ulong roleId)
         {
-            _client.UserJoined -= OnUserJoinedAsync;
+            try
+            {
+                await user.AddRoleAsync(roleId).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or ArgumentException or InvalidOperationException)
+            {
+                Logger.Warn($"Failed to assign welcome role to {user.Id} in guild {user.Guild.Id}: {ex.Message}");
+            }
         }
     }
 }
