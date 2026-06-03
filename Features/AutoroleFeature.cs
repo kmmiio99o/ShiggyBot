@@ -1,4 +1,3 @@
-using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Data;
 using ShiggyBot.Utils;
@@ -15,13 +14,11 @@ namespace ShiggyBot.Features
             _client = client;
             _db = db;
             _client.UserJoined += OnUserJoinedAsync;
-            _client.GuildAvailable += OnGuildAvailableAsync;
         }
 
         public void Unregister()
         {
             _client.UserJoined -= OnUserJoinedAsync;
-            _client.GuildAvailable -= OnGuildAvailableAsync;
         }
 
         private async Task OnUserJoinedAsync(SocketGuildUser user)
@@ -33,31 +30,6 @@ namespace ShiggyBot.Features
             }
 
             await AssignRoleAsync(user, roleId.Value).ConfigureAwait(false);
-        }
-
-        private async Task OnGuildAvailableAsync(SocketGuild guild)
-        {
-            ulong? roleId = await _db.GetWelcomeRoleAsync(guild.Id).ConfigureAwait(false);
-            if (roleId is null or 0)
-            {
-                return;
-            }
-
-            IRole? role = await guild.GetRoleAsync(roleId.Value).ConfigureAwait(false);
-            if (role is null)
-            {
-                return;
-            }
-
-            foreach (SocketGuildUser user in guild.Users)
-            {
-                if (user.Roles.Contains(role))
-                {
-                    continue;
-                }
-
-                await AssignRoleAsync(user, roleId.Value).ConfigureAwait(false);
-            }
         }
 
         private static async Task AssignRoleAsync(SocketGuildUser user, ulong roleId)
