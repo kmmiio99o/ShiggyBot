@@ -63,11 +63,38 @@ jobs:
         id: version
         run: echo "VERSION=$(cat VERSION | tr -d '\n')" >> "$GITHUB_OUTPUT"
 
+      - name: Write release notes
+        run: |
+          cat > release-notes.md << 'EOF'
+          **Requirements**
+
+          Create a `config.txt` file next to the executable with your bot token:
+
+          ```
+          # Discord bot token (required)
+          DISCORD_TOKEN=your_token_here
+
+          # Command prefix (default: S)
+          PREFIX=S
+          ```
+
+          A `config.example.txt` is included in the archive — rename and edit it.
+          Alternatively, set the `DISCORD_TOKEN` environment variable.
+
+          ---
+
+          **What's included**
+
+          - Single-file self-contained executable (no .NET runtime needed)
+          - `config.example.txt`
+          EOF
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${{ steps.version.outputs.VERSION }}" \
             --title "v${{ steps.version.outputs.VERSION }}" \
+            --notes-file release-notes.md \
             --target "${{ github.sha }}" \
             ShiggyBot-*.zip
