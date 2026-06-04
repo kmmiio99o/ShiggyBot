@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rid: [win-x64, linux-x64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag is on main
+        run: |
+          if ! git branch -a --contains "${{ github.sha }}" | grep -qE '(^|/)main$'; then
+            echo "Tag is not on the main branch. Skipping release."
+            exit 1
+          fi
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish
+        run: |
+          dotnet publish -c Release \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:UseAppHost=true \
+            -r ${{ matrix.rid }} \
+            -o publish
+
+      - name: Bundle
+        run: |
+          mkdir -p bundle
+          cp publish/ShiggyBot* bundle/
+          cp config.example.txt bundle/
+          cd bundle
+          zip -r ../ShiggyBot-${{ matrix.rid }}.zip .
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShiggyBot-${{ matrix.rid }}
+          path: ShiggyBot-${{ matrix.rid }}.zip
+
+  release:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ShiggyBot-*
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body: >
+            **Requirements**
+
+            Create a `config.txt` file next to the executable with your bot token:
+
+            ```
+            # Discord bot token (required)
+            DISCORD_TOKEN=your_token_here
+
+            # Command prefix (default: S)
+            PREFIX=S
+            ```
+
+            A `config.example.txt` is included in the archive — rename and edit it.
+            Alternatively, set the `DISCORD_TOKEN` environment variable.
+
+            ---
+
+            **What's included**
+
+            - Single-file self-contained executable (no .NET runtime needed)
+            - `config.example.txt`
+          files: ShiggyBot-*.zip

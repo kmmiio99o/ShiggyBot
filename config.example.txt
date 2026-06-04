@@ -1,0 +1,15 @@
+# Discord bot token (required)
+DISCORD_TOKEN=your_token_here
+
+# Command prefix (default: S)
+PREFIX=S
+
+# Presence settings
+PRESENCE_STATUS=online
+PRESENCE_INTERVAL=300
+
+# Optional: log errors to a Discord webhook
+LOG_WEBHOOK_URL=
+
+# Optional: Gemini AI token (for ai command)
+HF_TOKEN=
