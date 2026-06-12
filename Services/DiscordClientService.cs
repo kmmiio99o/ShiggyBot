@@ -1,5 +1,6 @@
 using Discord;
 using Discord.WebSocket;
+using Microsoft.Data.Sqlite;
 using ShiggyBot.Configuration;
 using ShiggyBot.Utils;
 using ShiggyBot.Features;
@@ -127,23 +128,30 @@ namespace ShiggyBot.Services
 
         private async Task OnMessageAsync(SocketMessage message)
         {
-            if (message.Author.IsBot)
+            try
             {
-                return;
-            }
+                if (message.Author.IsBot)
+                {
+                    return;
+                }
 
-            if (string.IsNullOrWhiteSpace(message.Content))
+                if (string.IsNullOrWhiteSpace(message.Content))
+                {
+                    return;
+                }
+
+                if (!message.Content.StartsWith(_config.Prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Let features handle non-prefix messages (code preview, commit preview, etc.)
+                    return;
+                }
+
+                await _commandHandler.HandleAsync(message).ConfigureAwait(false);
+            }
+            catch (SqliteException ex)
             {
-                return;
+                ErrorHandler.LogError("Database error in message handler", ex);
             }
-
-            if (!message.Content.StartsWith(_config.Prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                // Let features handle non-prefix messages (code preview, commit preview, etc.)
-                return;
-            }
-
-            await _commandHandler.HandleAsync(message).ConfigureAwait(false);
         }
 
         private async Task OnButtonExecutedAsync(SocketMessageComponent component)
@@ -202,47 +210,62 @@ namespace ShiggyBot.Services
 
         private async Task OnSelectMenuExecutedAsync(SocketMessageComponent component)
         {
-            if (component.Data.CustomId != "help_category_select")
+            try
             {
-                return;
-            }
-
-            string? selectedCategory = component.Data.Values.FirstOrDefault();
-            if (string.IsNullOrEmpty(selectedCategory))
-            {
-                return;
-            }
-
-            Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
-
-            if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
-            {
-                string prefix = _commandHandler.Prefix;
-                Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
-
-                // Rebuild select menu for navigation
-                SelectMenuBuilder menu = new()
+                if (component.Data.CustomId != "help_category_select")
                 {
-                    CustomId = "help_category_select",
-                    Placeholder = "Select a category...",
-                    MinValues = 1,
-                    MaxValues = 1
-                };
-
-                foreach (KeyValuePair<string, List<ICommand>> category in categories)
-                {
-                    string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
-                    string keyLower = category.Key.ToUpperInvariant();
-                    menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                    return;
                 }
 
-                MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
-
-                await component.UpdateAsync(msg =>
+                string? selectedCategory = component.Data.Values.FirstOrDefault();
+                if (string.IsNullOrEmpty(selectedCategory))
                 {
-                    msg.Embed = embed;
-                    msg.Components = messageComponents;
-                }).ConfigureAwait(false);
+                    return;
+                }
+
+                Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
+
+                if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
+                {
+                    string prefix = _commandHandler.Prefix;
+                    Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
+
+                    // Rebuild select menu for navigation
+                    SelectMenuBuilder menu = new()
+                    {
+                        CustomId = "help_category_select",
+                        Placeholder = "Select a category...",
+                        MinValues = 1,
+                        MaxValues = 1
+                    };
+
+                    foreach (KeyValuePair<string, List<ICommand>> category in categories)
+                    {
+                        string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
+                        string keyLower = category.Key.ToUpperInvariant();
+                        menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                    }
+
+                    MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
+
+                    await component.UpdateAsync(msg =>
+                    {
+                        msg.Embed = embed;
+                        msg.Components = messageComponents;
+                    }).ConfigureAwait(false);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                ErrorHandler.LogError("Discord error in select menu handler", ex);
+            }
+            catch (TimeoutException ex)
+            {
+                ErrorHandler.LogError("Timeout in select menu handler", ex);
+            }
+            catch (SqliteException ex)
+            {
+                ErrorHandler.LogError("Database error in select menu handler", ex);
             }
         }
 

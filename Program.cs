@@ -1,6 +1,18 @@
 using Microsoft.Extensions.Configuration;
 using ShiggyBot.Configuration;
 using ShiggyBot.Services;
+using ShiggyBot.Utils;
+
+AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+{
+    Logger.Error($"[FATAL] Unhandled exception. IsTerminating={args.IsTerminating}", args.ExceptionObject as Exception);
+};
+
+TaskScheduler.UnobservedTaskException += (sender, args) =>
+{
+    Logger.Error($"[FATAL] Unobserved task exception", args.Exception);
+    args.SetObserved();
+};
 
 IConfigurationBuilder builder = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())

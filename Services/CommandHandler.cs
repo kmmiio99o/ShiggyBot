@@ -1,4 +1,5 @@
 using Discord.WebSocket;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using ShiggyBot.Commands;
 using ShiggyBot.Commands.Utility;
@@ -149,6 +150,10 @@ namespace ShiggyBot.Services
                 await ErrorHandler.HandleCommandErrorAsync(userMessage, ex, command.Name).ConfigureAwait(false);
             }
             catch (InvalidOperationException ex)
+            {
+                await ErrorHandler.HandleCommandErrorAsync(userMessage, ex, command.Name).ConfigureAwait(false);
+            }
+            catch (SqliteException ex)
             {
                 await ErrorHandler.HandleCommandErrorAsync(userMessage, ex, command.Name).ConfigureAwait(false);
             }
