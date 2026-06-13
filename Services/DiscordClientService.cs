@@ -6,6 +6,7 @@ using ShiggyBot.Utils;
 using ShiggyBot.Features;
 using ShiggyBot.Data;
 using ShiggyBot.Commands;
+using ShiggyBot.Services.GitHub;
 using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Services
@@ -24,6 +25,7 @@ namespace ShiggyBot.Services
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
         private readonly WebhookLogger? _webhookLogger;
+        private readonly MonitorService _gitHubWebhook;
         // Ephemeral plugin handling is moved to PluginCommand; remove local cache.
 
         public DiscordClientService(BotConfig config, IConfiguration appConfig)
@@ -68,6 +70,10 @@ namespace ShiggyBot.Services
             // Initialize webhook logger
             _webhookLogger = new(appConfig);
             Logger.Info("[INIT] Webhook logger initialized");
+
+            // Initialize GitHub repo monitor
+            _gitHubWebhook = new(_client, appConfig);
+            Logger.Info("[INIT] GitHub monitor service initialized");
         }
 
         public async Task StartAsync()
@@ -98,6 +104,9 @@ namespace ShiggyBot.Services
 
             // Start ban check service after client is connected
             _banCheck.Start();
+
+            // Start GitHub webhook receiver
+            _gitHubWebhook.Start();
 
             Logger.Info("[STARTUP] All features initialized. Bot is running!");
             // Keep the process alive
@@ -279,6 +288,7 @@ namespace ShiggyBot.Services
             _banCheck?.Stop();
             _banCheck?.Dispose();
             _commandHandler?.Dispose();
+            _gitHubWebhook?.Dispose();
             _db?.Dispose();
             _client?.Dispose();
             _webhookLogger?.Dispose();
