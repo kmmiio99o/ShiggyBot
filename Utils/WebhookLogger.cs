@@ -1,81 +1,55 @@
 using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Utils
 {
-    /// <summary>
-    /// Logger that sends log messages to a Discord webhook.
-    /// </summary>
-    internal sealed class WebhookLogger(IConfiguration config) : IDisposable
+    internal static class WebhookLogger
     {
-        private readonly HttpClient _http = new();
-        private readonly string? _webhookUrl = config["LOG_WEBHOOK_URL"];
-
-        /// <summary>
-        /// Logs an info message to the webhook.
-        /// </summary>
-        /// <param name="message">The message to log.</param>
-
-        public async Task LogInfoAsync(string message)
+        public static async Task SendErrorAsync(string? webhookUrl, string message, Exception? ex = null, string title = "❌ ShiggyBot Error")
         {
-            await SendLogAsync("INFO", message, 0x00FF00).ConfigureAwait(false);
-        }
-
-        public async Task LogWarningAsync(string message)
-        {
-            ArgumentNullException.ThrowIfNull(message);
-            await SendLogAsync("WARN", message, 0xFFA500).ConfigureAwait(false);
-        }
-
-        public async Task LogErrorAsync(string message, Exception? ex = null)
-        {
-            ArgumentNullException.ThrowIfNull(message);
-            string fullMessage = ex != null ? $"{message}\n{ex.Message}\n{ex.StackTrace}" : message;
-            await SendLogAsync("ERROR", fullMessage, 0xFF0000).ConfigureAwait(false);
-        }
-
-        private async Task SendLogAsync(string level, string message, int color)
-        {
-            if (string.IsNullOrEmpty(_webhookUrl))
+            if (string.IsNullOrEmpty(webhookUrl))
             {
                 return;
             }
 
             try
             {
+                string description = ex != null
+                    ? $"{message}\n```\n{ex}\n```"
+                    : message;
+                description = description.Length > 2000 ? description[..2000] : description;
+
                 var embed = new
                 {
-                    title = $"[{level}] ShiggyBot",
-                    description = message.Length > 2000 ? message[0..2000] : message,
-                    color,
+                    title,
+                    description,
+                    color = 0xFF0000,
                     timestamp = DateTime.UtcNow
                 };
 
                 var payload = new
                 {
-                    embeds = new[] { embed }
+                    content = "<@879393496627306587>",
+                    embeds = new[] { embed },
+                    allowed_mentions = new { users = new[] { "879393496627306587" } }
                 };
 
                 string json = JsonSerializer.Serialize(payload);
                 using StringContent content = new(json, Encoding.UTF8, "application/json");
+                using HttpClient http = new();
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("ShiggyBot/1.0");
 
-                await _http.PostAsync(new Uri(_webhookUrl), content).ConfigureAwait(false);
+                await http.PostAsync(new Uri(webhookUrl), content).ConfigureAwait(false);
             }
-            catch (HttpRequestException ex)
+            catch (HttpRequestException)
             {
-                ErrorHandler.LogError("Webhook logging failed", ex);
             }
-            catch (TaskCanceledException ex)
+            catch (TaskCanceledException)
             {
-                ErrorHandler.LogError("Webhook logging timed out", ex);
             }
-        }
-
-        public void Dispose()
-        {
-            _http?.Dispose();
-            GC.SuppressFinalize(this);
+            catch (InvalidOperationException)
+            {
+            }
         }
     }
 }

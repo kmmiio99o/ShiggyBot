@@ -5,10 +5,14 @@ namespace ShiggyBot.Utils
 {
     internal static class ErrorHandler
     {
+        public static string? WebhookUrl { get; set; }
+
         public static async Task HandleCommandErrorAsync(SocketUserMessage message, Exception ex, string commandName)
         {
             ArgumentNullException.ThrowIfNull(message);
             Logger.Error($"Error in command '{commandName}': {ex}", ex);
+
+            _ = WebhookLogger.SendErrorAsync(WebhookUrl, $"Error in command `{commandName}`.", ex);
 
             Embed embed = EmbedHelper.BuildErrorEmbed($"An error occurred while executing `{commandName}`.");
             await message.Channel.SendMessageAsync(embed: embed).ConfigureAwait(false);
@@ -17,7 +21,7 @@ namespace ShiggyBot.Utils
         public static Task HandleFeatureErrorAsync(Exception ex, string featureName)
         {
             Logger.Error($"Error in feature '{featureName}': {ex}", ex);
-            // Features typically don't respond on error to avoid spam
+            _ = WebhookLogger.SendErrorAsync(WebhookUrl, $"Error in feature `{featureName}`.", ex);
             return Task.CompletedTask;
         }
 

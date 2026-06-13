@@ -24,9 +24,7 @@ namespace ShiggyBot.Services
         private GitHubStatsService? _gitHubStats;
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
-        private readonly WebhookLogger? _webhookLogger;
         private readonly MonitorService _gitHubWebhook;
-        // Ephemeral plugin handling is moved to PluginCommand; remove local cache.
 
         public DiscordClientService(BotConfig config, IConfiguration appConfig)
         {
@@ -66,10 +64,6 @@ namespace ShiggyBot.Services
 
             // Initialize ban check service
             _banCheck = new(_client, _db);
-
-            // Initialize webhook logger
-            _webhookLogger = new(appConfig);
-            Logger.Info("[INIT] Webhook logger initialized");
 
             // Initialize GitHub repo monitor
             _gitHubWebhook = new(_client, appConfig);
@@ -125,14 +119,11 @@ namespace ShiggyBot.Services
             return Task.CompletedTask;
         }
 
-        private async Task OnReadyAsync()
+        private Task OnReadyAsync()
         {
             Logger.Info($"[READY] ShiggyBot is ready! Logged in as {_client.CurrentUser.Username}#{_client.CurrentUser.Discriminator}");
             Logger.Info($"[READY] Connected to {_client.Guilds.Count} server(s)");
-            if (_webhookLogger != null)
-            {
-                await _webhookLogger.LogInfoAsync("ShiggyBot is ready!").ConfigureAwait(false);
-            }
+            return Task.CompletedTask;
         }
 
         private async Task OnMessageAsync(SocketMessage message)
@@ -291,7 +282,6 @@ namespace ShiggyBot.Services
             _gitHubWebhook?.Dispose();
             _db?.Dispose();
             _client?.Dispose();
-            _webhookLogger?.Dispose();
             GC.SuppressFinalize(this);
         }
     }
