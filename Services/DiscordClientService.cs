@@ -1,10 +1,12 @@
 using Discord;
 using Discord.WebSocket;
+using Microsoft.Data.Sqlite;
 using ShiggyBot.Configuration;
 using ShiggyBot.Utils;
 using ShiggyBot.Features;
 using ShiggyBot.Data;
 using ShiggyBot.Commands;
+using ShiggyBot.Services.GitHub;
 using Microsoft.Extensions.Configuration;
 
 namespace ShiggyBot.Services
@@ -22,8 +24,7 @@ namespace ShiggyBot.Services
         private GitHubStatsService? _gitHubStats;
         private CodePreviewFeature? _codePreview;
         private CommitPreviewFeature? _commitPreview;
-        private readonly WebhookLogger? _webhookLogger;
-        // Ephemeral plugin handling is moved to PluginCommand; remove local cache.
+        private readonly MonitorService _gitHubWebhook;
 
         public DiscordClientService(BotConfig config, IConfiguration appConfig)
         {
@@ -64,9 +65,9 @@ namespace ShiggyBot.Services
             // Initialize ban check service
             _banCheck = new(_client, _db);
 
-            // Initialize webhook logger
-            _webhookLogger = new(appConfig);
-            Logger.Info("[INIT] Webhook logger initialized");
+            // Initialize GitHub repo monitor
+            _gitHubWebhook = new(_client, appConfig);
+            Logger.Info("[INIT] GitHub monitor service initialized");
         }
 
         public async Task StartAsync()
@@ -98,6 +99,9 @@ namespace ShiggyBot.Services
             // Start ban check service after client is connected
             _banCheck.Start();
 
+            // Start GitHub webhook receiver
+            _gitHubWebhook.Start();
+
             Logger.Info("[STARTUP] All features initialized. Bot is running!");
             // Keep the process alive
             await Task.Delay(-1).ConfigureAwait(false);
@@ -115,35 +119,39 @@ namespace ShiggyBot.Services
             return Task.CompletedTask;
         }
 
-        private async Task OnReadyAsync()
+        private Task OnReadyAsync()
         {
             Logger.Info($"[READY] ShiggyBot is ready! Logged in as {_client.CurrentUser.Username}#{_client.CurrentUser.Discriminator}");
             Logger.Info($"[READY] Connected to {_client.Guilds.Count} server(s)");
-            if (_webhookLogger != null)
-            {
-                await _webhookLogger.LogInfoAsync("ShiggyBot is ready!").ConfigureAwait(false);
-            }
+            return Task.CompletedTask;
         }
 
         private async Task OnMessageAsync(SocketMessage message)
         {
-            if (message.Author.IsBot)
+            try
             {
-                return;
-            }
+                if (message.Author.IsBot)
+                {
+                    return;
+                }
 
-            if (string.IsNullOrWhiteSpace(message.Content))
+                if (string.IsNullOrWhiteSpace(message.Content))
+                {
+                    return;
+                }
+
+                if (!message.Content.StartsWith(_config.Prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Let features handle non-prefix messages (code preview, commit preview, etc.)
+                    return;
+                }
+
+                await _commandHandler.HandleAsync(message).ConfigureAwait(false);
+            }
+            catch (SqliteException ex)
             {
-                return;
+                ErrorHandler.LogError("Database error in message handler", ex);
             }
-
-            if (!message.Content.StartsWith(_config.Prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                // Let features handle non-prefix messages (code preview, commit preview, etc.)
-                return;
-            }
-
-            await _commandHandler.HandleAsync(message).ConfigureAwait(false);
         }
 
         private async Task OnButtonExecutedAsync(SocketMessageComponent component)
@@ -202,47 +210,62 @@ namespace ShiggyBot.Services
 
         private async Task OnSelectMenuExecutedAsync(SocketMessageComponent component)
         {
-            if (component.Data.CustomId != "help_category_select")
+            try
             {
-                return;
-            }
-
-            string? selectedCategory = component.Data.Values.FirstOrDefault();
-            if (string.IsNullOrEmpty(selectedCategory))
-            {
-                return;
-            }
-
-            Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
-
-            if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
-            {
-                string prefix = _commandHandler.Prefix;
-                Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
-
-                // Rebuild select menu for navigation
-                SelectMenuBuilder menu = new()
+                if (component.Data.CustomId != "help_category_select")
                 {
-                    CustomId = "help_category_select",
-                    Placeholder = "Select a category...",
-                    MinValues = 1,
-                    MaxValues = 1
-                };
-
-                foreach (KeyValuePair<string, List<ICommand>> category in categories)
-                {
-                    string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
-                    string keyLower = category.Key.ToUpperInvariant();
-                    menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                    return;
                 }
 
-                MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
-
-                await component.UpdateAsync(msg =>
+                string? selectedCategory = component.Data.Values.FirstOrDefault();
+                if (string.IsNullOrEmpty(selectedCategory))
                 {
-                    msg.Embed = embed;
-                    msg.Components = messageComponents;
-                }).ConfigureAwait(false);
+                    return;
+                }
+
+                Dictionary<string, List<ICommand>> categories = _commandHandler.GetCommandsByCategory();
+
+                if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
+                {
+                    string prefix = _commandHandler.Prefix;
+                    Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
+
+                    // Rebuild select menu for navigation
+                    SelectMenuBuilder menu = new()
+                    {
+                        CustomId = "help_category_select",
+                        Placeholder = "Select a category...",
+                        MinValues = 1,
+                        MaxValues = 1
+                    };
+
+                    foreach (KeyValuePair<string, List<ICommand>> category in categories)
+                    {
+                        string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
+                        string keyLower = category.Key.ToUpperInvariant();
+                        menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                    }
+
+                    MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
+
+                    await component.UpdateAsync(msg =>
+                    {
+                        msg.Embed = embed;
+                        msg.Components = messageComponents;
+                    }).ConfigureAwait(false);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                ErrorHandler.LogError("Discord error in select menu handler", ex);
+            }
+            catch (TimeoutException ex)
+            {
+                ErrorHandler.LogError("Timeout in select menu handler", ex);
+            }
+            catch (SqliteException ex)
+            {
+                ErrorHandler.LogError("Database error in select menu handler", ex);
             }
         }
 
@@ -256,9 +279,9 @@ namespace ShiggyBot.Services
             _banCheck?.Stop();
             _banCheck?.Dispose();
             _commandHandler?.Dispose();
+            _gitHubWebhook?.Dispose();
             _db?.Dispose();
             _client?.Dispose();
-            _webhookLogger?.Dispose();
             GC.SuppressFinalize(this);
         }
     }

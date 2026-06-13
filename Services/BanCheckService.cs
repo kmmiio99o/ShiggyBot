@@ -1,4 +1,5 @@
 using Discord.WebSocket;
+using Microsoft.Data.Sqlite;
 using ShiggyBot.Data;
 using ShiggyBot.Utils;
 
@@ -38,6 +39,14 @@ namespace ShiggyBot.Services
             catch (TaskCanceledException ex)
             {
                 ErrorHandler.LogError("Timeout checking expired bans", ex);
+            }
+            catch (SqliteException ex)
+            {
+                ErrorHandler.LogError("Database error in ban check loop", ex);
+            }
+            catch (InvalidOperationException ex)
+            {
+                ErrorHandler.LogError("Discord error in ban check loop", ex);
             }
         }
 

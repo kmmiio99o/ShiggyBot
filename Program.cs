@@ -1,6 +1,22 @@
 using Microsoft.Extensions.Configuration;
 using ShiggyBot.Configuration;
 using ShiggyBot.Services;
+using ShiggyBot.Utils;
+
+string? webhookUrl = null;
+
+AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+{
+    Logger.Error($"[FATAL] Unhandled exception. IsTerminating={args.IsTerminating}", args.ExceptionObject as Exception);
+    _ = WebhookLogger.SendErrorAsync(webhookUrl, "Unhandled exception — bot crashed.", args.ExceptionObject as Exception, "🚨 ShiggyBot Crashed");
+};
+
+TaskScheduler.UnobservedTaskException += (sender, args) =>
+{
+    Logger.Error($"[FATAL] Unobserved task exception", args.Exception);
+    _ = WebhookLogger.SendErrorAsync(webhookUrl, "Unobserved task exception.", args.Exception, "🚨 ShiggyBot Crashed");
+    args.SetObserved();
+};
 
 IConfigurationBuilder builder = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -24,6 +40,8 @@ if (File.Exists(configTxt))
 }
 
 IConfiguration appConfig = builder.Build();
+webhookUrl = appConfig["LOG_WEBHOOK_URL"];
+ErrorHandler.WebhookUrl = webhookUrl;
 
 BotConfig config = BotConfig.LoadFromConfiguration(appConfig);
 using DiscordClientService client = new(config, appConfig);
