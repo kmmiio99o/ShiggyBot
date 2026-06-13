@@ -6,10 +6,11 @@ using ShiggyBot.Utils;
 using ShiggyBot.Features;
 using ShiggyBot.Data;
 using ShiggyBot.Commands;
+using ShiggyBot.Services;
 using ShiggyBot.Services.GitHub;
 using Microsoft.Extensions.Configuration;
-
-namespace ShiggyBot.Services
+using Discord.Net.WebSockets;
+namespace ShiggyBot.Discord
 {
     internal sealed class DiscordClientService : IDisposable
     {
@@ -41,7 +42,8 @@ namespace ShiggyBot.Services
                 GatewayIntents = GatewayIntents.Guilds
                                  | GatewayIntents.GuildMembers
                                  | GatewayIntents.GuildMessages
-                                 | GatewayIntents.MessageContent
+                                 | GatewayIntents.MessageContent,
+                WebSocketProvider = () => new VrWebSocket(DefaultWebSocketProvider.Instance())
             };
             _client = new DiscordSocketClient(cfg);
             // Log += LogAsync; // Disabled in favor of custom logs

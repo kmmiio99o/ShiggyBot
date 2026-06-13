@@ -4,7 +4,7 @@ using Discord.WebSocket;
 using Microsoft.Extensions.Configuration;
 using ShiggyBot.Services;
 
-namespace ShiggyBot.Features
+namespace ShiggyBot.Discord
 {
     internal sealed class PresenceFeature : IDisposable
     {

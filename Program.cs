@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using ShiggyBot.Configuration;
-using ShiggyBot.Services;
+using ShiggyBot.Discord;
 using ShiggyBot.Utils;
 
 string? webhookUrl = null;
