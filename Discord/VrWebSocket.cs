@@ -1,4 +1,6 @@
 using Discord.Net.WebSockets;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Text;
 
 namespace ShiggyBot.Discord
@@ -6,6 +8,7 @@ namespace ShiggyBot.Discord
     internal sealed class VrWebSocket : IWebSocketClient
     {
         private readonly IWebSocketClient _inner;
+        private bool _pendingIdentify = true;
 
         public VrWebSocket(IWebSocketClient inner)
         {
@@ -31,6 +34,7 @@ namespace ShiggyBot.Discord
 
         public Task ConnectAsync(string host)
         {
+            _pendingIdentify = true;
             return _inner.ConnectAsync(host);
         }
 
@@ -41,23 +45,33 @@ namespace ShiggyBot.Discord
 
         public async Task SendAsync(byte[] data, int index, int count, bool isText)
         {
-            if (isText)
+            if (isText && _pendingIdentify)
             {
-                string json = Encoding.UTF8.GetString(data, index, count);
-                if (json.Contains("\"op\":2", StringComparison.Ordinal) || json.Contains("\"op\": 2", StringComparison.Ordinal))
+                try
                 {
-                    json = json.Replace(
-                        "\"$browser\":\"Discord.Net\"",
-                        "\"$browser\":\"Discord VR\"", StringComparison.Ordinal);
-                    json = json.Replace(
-                        "\"$device\":\"Discord.Net\"",
-                        "\"$device\":\"VR\"", StringComparison.Ordinal);
-                    json = json.Replace(
-                        "\"$os\":\"" + Environment.OSVersion.Platform + "\"",
-                        "\"$os\":\"Oculus Quest\"", StringComparison.Ordinal);
-                    data = Encoding.UTF8.GetBytes(json);
-                    index = 0;
-                    count = data.Length;
+                    string json = Encoding.UTF8.GetString(data, index, count);
+                    JObject frame = JObject.Parse(json);
+                    if (frame.Value<int>("op") == 2)
+                    {
+                        _pendingIdentify = false;
+                        if (frame["d"] is JObject identify && identify["properties"] is JObject props)
+                        {
+                            props["$browser"] = "Discord VR";
+                            props["$device"] = "VR";
+                            props["$os"] = "Oculus Quest";
+                            data = Encoding.UTF8.GetBytes(frame.ToString(Formatting.None));
+                            index = 0;
+                            count = data.Length;
+                        }
+                    }
+                }
+                catch (JsonReaderException)
+                {
+                    // Ignore malformed payloads; send unmodified
+                }
+                catch (InvalidOperationException)
+                {
+                    // Ignore unexpected JSON structure; send unmodified
                 }
             }
             await _inner.SendAsync(data, index, count, isText).ConfigureAwait(false);
