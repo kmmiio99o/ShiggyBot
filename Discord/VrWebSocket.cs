@@ -56,9 +56,10 @@ namespace ShiggyBot.Discord
                         _pendingIdentify = false;
                         if (frame["d"] is JObject identify && identify["properties"] is JObject props)
                         {
+                            string? originalOs = props.Value<string>("$os");
                             props["$browser"] = "Discord VR";
-                            props["$device"] = "VR";
-                            props["$os"] = "Oculus Quest";
+                            props["$device"] = "Oculus Quest 2";
+                            props["$os"] = originalOs ?? "Android";
                             data = Encoding.UTF8.GetBytes(frame.ToString(Formatting.None));
                             index = 0;
                             count = data.Length;
@@ -67,11 +68,9 @@ namespace ShiggyBot.Discord
                 }
                 catch (JsonReaderException)
                 {
-                    // Ignore malformed payloads; send unmodified
                 }
                 catch (InvalidOperationException)
                 {
-                    // Ignore unexpected JSON structure; send unmodified
                 }
             }
             await _inner.SendAsync(data, index, count, isText).ConfigureAwait(false);
