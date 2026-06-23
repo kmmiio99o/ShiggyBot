@@ -14,8 +14,25 @@ namespace ShiggyBot.Discord
         {
             _inner = inner;
             _inner.BinaryMessage += (data, index, count) => BinaryMessage?.Invoke(data, index, count);
-            _inner.TextMessage += (text) => TextMessage?.Invoke(text);
+            _inner.TextMessage += OnTextMessage;
             _inner.Closed += (ex) => Closed?.Invoke(ex);
+        }
+
+        private Task OnTextMessage(string text)
+        {
+            try
+            {
+                JObject frame = JObject.Parse(text);
+                if (frame.Value<int>("op") == 9)
+                {
+                    _pendingIdentify = true;
+                }
+            }
+            catch (JsonReaderException)
+            {
+            }
+
+            return TextMessage?.Invoke(text) ?? Task.CompletedTask;
         }
 
         public event Func<byte[], int, int, Task>? BinaryMessage;
