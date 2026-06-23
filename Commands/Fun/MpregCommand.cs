@@ -29,6 +29,7 @@ namespace ShiggyBot.Commands.Fun
 
         private const float HeadR = 8f;
 
+        private static readonly HttpClient _http = new();
         private static string BasePngPath => Path.Combine(AppContext.BaseDirectory, "assets", "mpreg.png");
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
@@ -52,8 +53,7 @@ namespace ShiggyBot.Commands.Fun
             string avatarUrl = target.GetAvatarUrl(ImageFormat.Png, 256)
                 ?? target.GetDefaultAvatarUrl();
 
-            using HttpClient http = new();
-            byte[] avatarData = await http.GetByteArrayAsync(new Uri(avatarUrl)).ConfigureAwait(false);
+            byte[] avatarData = await _http.GetByteArrayAsync(new Uri(avatarUrl)).ConfigureAwait(false);
 
             string fileName = $"mpreg_{target.Id}.png";
             string filePath = Path.Combine(Path.GetTempPath(), fileName);

@@ -9,6 +9,7 @@ namespace ShiggyBot.Features
     {
         private readonly DiscordSocketClient _client;
         private static readonly HttpClient _http = new();
+        private static readonly Lock _rateLimitLock = new();
         private static int _rateLimitRemaining = 60;
         private static long _rateLimitReset;
 
@@ -120,16 +121,20 @@ namespace ShiggyBot.Features
         {
             long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-            if (now > _rateLimitReset)
+            lock (_rateLimitLock)
             {
-                _rateLimitRemaining = 60;
-                _rateLimitReset = now + 3600;
-            }
+                if (now > _rateLimitReset)
+                {
+                    _rateLimitRemaining = 60;
+                    _rateLimitReset = now + 3600;
+                }
 
-            if (_rateLimitRemaining <= 0)
-            {
-                long wait = Math.Max(0, _rateLimitReset - now) + 1;
-                await Task.Delay((int)(wait * 1000)).ConfigureAwait(false);
+                if (_rateLimitRemaining <= 0)
+                {
+                    return null; // Let the caller skip; don't block for rate limit
+                }
+
+                _rateLimitRemaining--;
             }
 
             using CancellationTokenSource cts = new(TimeSpan.FromSeconds(15));

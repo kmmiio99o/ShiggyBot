@@ -58,7 +58,6 @@ namespace ShiggyBot.Discord
 
             // Initialize database
             _db = new();
-            Logger.Info("[INIT] Database initialized");
 
             // Initialize command handling (pass database)
             _commandHandler = new(_client, config.Prefix, _db);
@@ -80,7 +79,11 @@ namespace ShiggyBot.Discord
                 return;
             }
 
-            // Initialize features before connecting so no events are missed
+            // Initialize database and features before connecting so no events are missed
+            Logger.Info("[STARTUP] Initializing database...");
+            await _db.InitializeAsync().ConfigureAwait(false);
+            Logger.Info("[STARTUP] Database initialized");
+
             Logger.Info("[STARTUP] Initializing features...");
             _autorole = new(_client, _db);
             Logger.Info("[STARTUP] Autorole feature loaded");

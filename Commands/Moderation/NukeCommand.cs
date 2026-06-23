@@ -70,10 +70,20 @@ namespace ShiggyBot.Commands.Moderation
             RestUserMessage confirmation = await message.Channel.SendMessageAsync(embed: confirmEmbed.Build()).ConfigureAwait(false);
             _ = Task.Run(async () =>
             {
-                await Task.Delay(5_000).ConfigureAwait(false);
-                try { await confirmation.DeleteAsync().ConfigureAwait(false); }
-                catch (HttpRequestException) { }
-                catch (InvalidOperationException) { }
+                try
+                {
+                    await Task.Delay(5_000).ConfigureAwait(false);
+                    await confirmation.DeleteAsync().ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+                catch (OperationCanceledException)
+                {
+                }
             });
         }
 

@@ -5,6 +5,8 @@ namespace ShiggyBot.Utils
 {
     internal static class WebhookLogger
     {
+        private static readonly HttpClient _http = new() { DefaultRequestHeaders = { { "User-Agent", "ShiggyBot/1.0" } } };
+
         public static async Task SendErrorAsync(string? webhookUrl, string message, Exception? ex = null, string title = "❌ ShiggyBot Error")
         {
             if (string.IsNullOrEmpty(webhookUrl))
@@ -36,10 +38,8 @@ namespace ShiggyBot.Utils
 
                 string json = JsonSerializer.Serialize(payload);
                 using StringContent content = new(json, Encoding.UTF8, "application/json");
-                using HttpClient http = new();
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("ShiggyBot/1.0");
 
-                await http.PostAsync(new Uri(webhookUrl), content).ConfigureAwait(false);
+                await _http.PostAsync(new Uri(webhookUrl), content).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {

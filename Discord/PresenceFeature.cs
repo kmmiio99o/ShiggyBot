@@ -39,7 +39,12 @@ namespace ShiggyBot.Discord
             return Task.CompletedTask;
         }
 
-        private async void UpdatePresence(object? state)
+        private void UpdatePresence(object? state)
+        {
+            _ = UpdatePresenceAsync();
+        }
+
+        private async Task UpdatePresenceAsync()
         {
             try
             {
@@ -54,11 +59,9 @@ namespace ShiggyBot.Discord
             }
             catch (HttpRequestException)
             {
-                // Ignore presence update errors
             }
             catch (TaskCanceledException)
             {
-                // Ignore presence update timeout errors
             }
         }
 

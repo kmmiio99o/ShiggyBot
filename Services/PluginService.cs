@@ -39,8 +39,8 @@ namespace ShiggyBot.Services
                 foreach (PluginResult plugin in plugins)
                 {
                     // Check both name and description for matches
-                    int nameDistance = LevenshteinDistance(plugin.Name.ToUpperInvariant(), query.ToUpperInvariant());
-                    int descriptionDistance = LevenshteinDistance(plugin.Description.ToUpperInvariant(), query.ToUpperInvariant());
+                    int nameDistance = LevenshteinDistance(plugin.Name, query, ignoreCase: true);
+                    int descriptionDistance = LevenshteinDistance(plugin.Description, query, ignoreCase: true);
 
                     int distance = Math.Min(nameDistance, descriptionDistance);
 
@@ -243,46 +243,47 @@ namespace ShiggyBot.Services
             }
         }
 
-        private static int LevenshteinDistance(string s1, string s2)
+        private static int LevenshteinDistance(string s1, string s2, bool ignoreCase = false)
         {
-            if (s1.Length == 0)
+            int n = s1.Length;
+            int m = s2.Length;
+            if (n == 0)
             {
-                return s2.Length;
-            }
-            if (s2.Length == 0)
-            {
-                return s1.Length;
+                return m;
             }
 
-            int[][] d = new int[s1.Length + 1][];
-            for (int i = 0; i <= s1.Length; i++)
+            if (m == 0)
             {
-                d[i] = new int[s2.Length + 1];
+                return n;
             }
 
-            for (int i = 0; i <= s1.Length; i++)
+            int[] prev = new int[m + 1];
+            int[] curr = new int[m + 1];
+
+            for (int j = 0; j <= m; j++)
             {
-                d[i][0] = i;
+                prev[j] = j;
             }
 
-            for (int j = 0; j <= s2.Length; j++)
+            for (int i = 1; i <= n; i++)
             {
-                d[0][j] = j;
-            }
-
-            for (int i = 1; i <= s1.Length; i++)
-            {
-                for (int j = 1; j <= s2.Length; j++)
+                curr[0] = i;
+                for (int j = 1; j <= m; j++)
                 {
-                    int cost = (s1[i - 1] == s2[j - 1]) ? 0 : 1;
+                    bool charsEqual = ignoreCase
+                        ? char.ToUpperInvariant(s1[i - 1]) == char.ToUpperInvariant(s2[j - 1])
+                        : s1[i - 1] == s2[j - 1];
+                    int cost = charsEqual ? 0 : 1;
 
-                    d[i][j] = Math.Min(
-                        Math.Min(d[i - 1][j] + 1, d[i][j - 1] + 1),
-                        d[i - 1][j - 1] + cost);
+                    curr[j] = Math.Min(
+                        Math.Min(curr[j - 1] + 1, prev[j] + 1),
+                        prev[j - 1] + cost);
                 }
+
+                (prev, curr) = (curr, prev);
             }
 
-            return d[s1.Length][s2.Length];
+            return prev[m];
         }
     }
 

@@ -16,8 +16,7 @@ namespace ShiggyBot.Services
             _repo = repo;
             _http = new HttpClient();
             _http.DefaultRequestHeaders.UserAgent.ParseAdd("ShiggyBot/1.0");
-            _stats = FetchStatsAsync().GetAwaiter().GetResult();
-            _timer = new Timer(async _ => await FetchStatsAsync().ConfigureAwait(false), null, TimeSpan.FromMinutes(refreshMinutes), TimeSpan.FromMinutes(refreshMinutes));
+            _timer = new Timer(async _ => await FetchStatsAsync().ConfigureAwait(false), null, TimeSpan.Zero, TimeSpan.FromMinutes(refreshMinutes));
         }
 
         public RepoStats Stats => _stats;

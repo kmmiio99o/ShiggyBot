@@ -10,14 +10,12 @@ namespace ShiggyBot.Data
 
         public DatabaseService(string dbPath = "shiggybot.db")
         {
-            // Store database in the same directory as the executable
             string baseDir = AppContext.BaseDirectory;
             _dbPath = Path.Combine(baseDir, dbPath);
             _connection = new($"Data Source={_dbPath}");
-            InitializeDatabase().Wait();
         }
 
-        private async Task InitializeDatabase()
+        public async Task InitializeAsync()
         {
             await _connection.OpenAsync().ConfigureAwait(false);
             using SqliteCommand command = _connection.CreateCommand();
