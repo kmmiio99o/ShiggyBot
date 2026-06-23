@@ -120,16 +120,16 @@ namespace ShiggyBot.Commands.Search
 
         private static async Task HandleSuccessfulSearchAsync(SocketUserMessage message, PluginResult result)
         {
-            EmbedBuilder embed = new()
-            {
-                Title = $"🔌 {result.Name}",
-                Description = result.Description,
-                Color = GetStatusColor(result.Status)
-            };
-
-            // Add status field with emoji
+            Color statusColor = GetStatusColor(result.Status);
             string statusEmoji = GetStatusEmoji(result.Status);
-            embed.AddField("Status", $"{statusEmoji} {result.Status}", inline: true);
+
+            EmbedBuilder embed = new EmbedBuilder()
+                .WithTitle($"🔌 {result.Name}")
+                .WithDescription(result.Description)
+                .WithColor(statusColor);
+
+            // Add prominent status field with color-coded emoji
+            embed.AddField("Status", $"{statusEmoji} **{result.Status}**", inline: true);
 
             // Add authors if available
             if (result.Authors.Count > 0)
@@ -146,10 +146,16 @@ namespace ShiggyBot.Commands.Search
             // Build buttons
             ComponentBuilder componentBuilder = new();
 
-            // Add Install button
+            // Add Install button with status-appropriate styling
             if (!string.IsNullOrWhiteSpace(result.InstallUrl))
             {
-                componentBuilder.WithButton("📥 Install", customId: $"plugin_install_{result.Name}", style: ButtonStyle.Primary);
+                ButtonStyle installButtonStyle = result.Status?.ToUpperInvariant() switch
+                {
+                    "BROKEN" => ButtonStyle.Secondary,
+                    "WARNING" => ButtonStyle.Primary,
+                    _ => ButtonStyle.Success
+                };
+                componentBuilder.WithButton("📥 Install", customId: $"plugin_install_{result.Name}", style: installButtonStyle);
             }
 
             // Add Source button as a link to the repository
@@ -190,9 +196,9 @@ namespace ShiggyBot.Commands.Search
         {
             return status?.ToUpperInvariant() switch
             {
-                "working" => "✅",
-                "warning" => "⚠️",
-                "broken" => "❌",
+                "WORKING" => "✅",
+                "WARNING" => "⚠️",
+                "BROKEN" => "❌",
                 _ => "❓"
             };
         }
@@ -201,9 +207,9 @@ namespace ShiggyBot.Commands.Search
         {
             return status?.ToUpperInvariant() switch
             {
-                "working" => new Color(0x27AE60),      // Green
-                "warning" => new Color(0xF39C12),      // Orange
-                "broken" => new Color(0xE74C3C),       // Red
+                "WORKING" => new Color(0x27AE60),      // Green
+                "WARNING" => new Color(0xF39C12),      // Orange
+                "BROKEN" => new Color(0xE74C3C),       // Red
                 _ => new Color(0x3498DB)                // Blue
             };
         }
