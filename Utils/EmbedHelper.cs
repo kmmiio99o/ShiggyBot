@@ -161,6 +161,7 @@ namespace ShiggyBot.Utils
                 "UTILITY" => new Color(0x1E90FF),
                 "MODERATION" => new Color(0xFFA500),
                 "SEARCH" => new Color(0x00FF00),
+                "FUN" => new Color(0xE91E63),
                 _ => new Color(0x95A5A6)
             };
         }
@@ -173,6 +174,7 @@ namespace ShiggyBot.Utils
                 "UTILITY" => "🔧",
                 "MODERATION" => "🛡️",
                 "SEARCH" => "🔍",
+                "FUN" => "🎮",
                 _ => "📁"
             };
         }

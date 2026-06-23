@@ -21,6 +21,14 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.9" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.104" PrivateAssets="All" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
+    <PackageReference Include="Svg.Skia" Version="5.1.1" />
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="3.50.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="assets/mpreg.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

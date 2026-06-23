@@ -6,6 +6,7 @@ using ShiggyBot.Commands.Utility;
 using ShiggyBot.Commands.Moderation;
 using ShiggyBot.Commands.Core;
 using ShiggyBot.Commands.Search;
+using ShiggyBot.Commands.Fun;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
 
@@ -64,6 +65,9 @@ namespace ShiggyBot.Services
             // Search Commands
             Register(new PluginCommand(_pluginService));
             Register(new GoogleCommand());
+
+            // Fun Commands
+            Register(new MpregCommand());
         }
 
         private void Register(ICommand command)
