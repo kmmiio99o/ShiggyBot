@@ -11,9 +11,6 @@ PRESENCE_INTERVAL=300
 # Optional: log errors to a Discord webhook
 LOG_WEBHOOK_URL=
 
-# Optional: Gemini AI token (for ai command)
-HF_TOKEN=
-
 # GitHub repo monitoring (commits, PRs, stars)
 GITHUB_REPO=kmmiio99o/ShiggyCord
 GITHUB_WEBHOOK_CHANNEL_ID=

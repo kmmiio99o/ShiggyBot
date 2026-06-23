@@ -61,7 +61,7 @@ namespace ShiggyBot.Discord
             Logger.Info("[INIT] Database initialized");
 
             // Initialize command handling (pass database)
-            _commandHandler = new(_client, config.Prefix, _appConfig, _db);
+            _commandHandler = new(_client, config.Prefix, _db);
             Logger.Info("[INIT] Command handler initialized");
 
             // Initialize ban check service

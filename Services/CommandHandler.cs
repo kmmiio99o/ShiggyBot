@@ -1,6 +1,5 @@
 using Discord.WebSocket;
 using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Configuration;
 using ShiggyBot.Commands;
 using ShiggyBot.Commands.Utility;
 using ShiggyBot.Commands.Moderation;
@@ -18,16 +17,12 @@ namespace ShiggyBot.Services
         public string Prefix { get; }
         private readonly Dictionary<string, ICommand> _commands = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<ICommand> _commandList = [];
-        private readonly IConfiguration _config;
         private readonly DatabaseService _db;
         private readonly PluginService _pluginService;
-        private AiCommand? _aiCommand;
-
-        public CommandHandler(DiscordSocketClient client, string prefix, IConfiguration config, DatabaseService db)
+        public CommandHandler(DiscordSocketClient client, string prefix, DatabaseService db)
         {
             _client = client;
             Prefix = prefix ?? "S";
-            _config = config;
             _db = db;
             _pluginService = new PluginService();
             RegisterCommands();
@@ -36,7 +31,6 @@ namespace ShiggyBot.Services
 
         public void Dispose()
         {
-            _aiCommand?.Dispose();
             _pluginService?.Dispose();
             GC.SuppressFinalize(this);
         }
@@ -47,8 +41,6 @@ namespace ShiggyBot.Services
             Register(new PingCommand());
             Register(new HelpCommand(this));
             Register(new NoteCommand());
-            _aiCommand = new(_config);
-            Register(_aiCommand);
 
             // Moderation Commands
             Register(new KickCommand());
