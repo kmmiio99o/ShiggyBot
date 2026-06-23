@@ -1,8 +1,11 @@
 using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Utils;
-using SkiaSharp;
-using Svg.Skia;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using Color = Discord.Color;
+using Image = SixLabors.ImageSharp.Image;
 
 namespace ShiggyBot.Commands.Fun
 {
@@ -26,7 +29,7 @@ namespace ShiggyBot.Commands.Fun
 
         private const float HeadR = 8f;
 
-        private static string SvgPath => Path.Combine(AppContext.BaseDirectory, "assets", "mpreg.svg");
+        private static string BasePngPath => Path.Combine(AppContext.BaseDirectory, "assets", "mpreg.png");
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
@@ -99,88 +102,76 @@ namespace ShiggyBot.Commands.Fun
 
         private static void GenerateMpregImageCore(byte[] avatarData, string outputPath)
         {
-            using SKSvg svg = new();
-            SKPicture? picture = svg.Load(SvgPath);
-
-            _ = picture ?? throw new InvalidOperationException("SVG parsing returned null picture.");
+            using Image<Rgba32> baseImage = Image.Load<Rgba32>(BasePngPath);
 
             float scale = OutputSize / SvgViewBox;
             float headX = HeadCx * scale;
             float headY = HeadCy * scale;
-            float headR = HeadR * scale;
+            float headRadius = HeadR * scale;
+            float circleDiameter = headRadius * 2;
 
-            using SKBitmap bitmap = new(OutputSize, OutputSize);
-            using SKCanvas canvas = new(bitmap);
-            canvas.Clear(SKColors.Transparent);
+            using Image<Rgba32> avatar = Image.Load<Rgba32>(avatarData);
 
-            canvas.Save();
-            canvas.Scale(scale, scale);
-            canvas.DrawPicture(picture);
-            canvas.Restore();
+            int minSide = Math.Min(avatar.Width, avatar.Height);
+            int cropX = (avatar.Width - minSide) / 2;
+            int cropY = (avatar.Height - minSide) / 2;
+            avatar.Mutate(ctx => ctx.Crop(new Rectangle(cropX, cropY, minSide, minSide)));
+            avatar.Mutate(ctx => ctx.Resize((int)circleDiameter, (int)circleDiameter));
 
-            using SKBitmap? avatarBitmap = SKBitmap.Decode(avatarData);
-            if (avatarBitmap is not null)
+            int circlePixels = (int)circleDiameter;
+            float r = circleDiameter / 2f;
+            float cx = r;
+            float cy = r;
+            for (int y = 0; y < circlePixels; y++)
             {
-                float circleSize = headR * 2;
-                using SKBitmap circularAvatar = new((int)circleSize, (int)circleSize);
-                using SKCanvas avatarCanvas = new(circularAvatar);
-                avatarCanvas.Clear(SKColors.Transparent);
-
-                using SKPath clipPath = new();
-                clipPath.AddCircle(headR, headR, headR);
-                avatarCanvas.ClipPath(clipPath, antialias: true);
-
-                using SKPaint paint = new() { IsAntialias = true };
-                float srcSize = Math.Min(avatarBitmap.Width, avatarBitmap.Height);
-                float sx = (avatarBitmap.Width - srcSize) / 2f;
-                float sy = (avatarBitmap.Height - srcSize) / 2f;
-                SKRect srcRect = new(sx, sy, sx + srcSize, sy + srcSize);
-                SKRect destRect = new(0, 0, circleSize, circleSize);
-                avatarCanvas.DrawBitmap(avatarBitmap, srcRect, destRect, paint);
-
-                canvas.DrawBitmap(circularAvatar, headX - headR, headY - headR);
+                for (int x = 0; x < circlePixels; x++)
+                {
+                    float dx = x - cx + 0.5f;
+                    float dy = y - cy + 0.5f;
+                    if ((dx * dx) + (dy * dy) > r * r)
+                    {
+                        avatar[x, y] = new Rgba32(0, 0, 0, 0);
+                    }
+                }
             }
 
-            using SKImage image = SKImage.FromBitmap(bitmap);
-            using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
-            using FileStream stream = File.OpenWrite(outputPath);
-            data.SaveTo(stream);
+            baseImage.Mutate(ctx => ctx.DrawImage(avatar, new Point((int)(headX - headRadius), (int)(headY - headRadius)), 1f));
+
+            baseImage.Save(outputPath);
         }
 
         private static Color GetAverageColor(byte[] imageData)
         {
-            using SKBitmap? bitmap = SKBitmap.Decode(imageData);
-            if (bitmap is null)
+            try
             {
-                return new Color(0xE91E63);
-            }
+                using Image<Rgba32> avatar = Image.Load<Rgba32>(imageData);
 
-            long totalR = 0, totalG = 0, totalB = 0;
-            int count = 0;
-            int step = Math.Max(1, Math.Min(bitmap.Width, bitmap.Height) / 32);
+                long totalR = 0, totalG = 0, totalB = 0;
+                int count = 0;
+                int step = Math.Max(1, Math.Min(avatar.Width, avatar.Height) / 32);
 
-            for (int y = 0; y < bitmap.Height; y += step)
-            {
-                for (int x = 0; x < bitmap.Width; x += step)
+                for (int y = 0; y < avatar.Height; y += step)
                 {
-                    SKColor pixel = bitmap.GetPixel(x, y);
-                    totalR += pixel.Red;
-                    totalG += pixel.Green;
-                    totalB += pixel.Blue;
-                    count++;
+                    for (int x = 0; x < avatar.Width; x += step)
+                    {
+                        Rgba32 pixel = avatar[x, y];
+                        totalR += pixel.R;
+                        totalG += pixel.G;
+                        totalB += pixel.B;
+                        count++;
+                    }
                 }
-            }
 
-            if (count == 0)
+                return count == 0
+                    ? new Color(0xE91E63)
+                    : new Color((byte)(totalR / count), (byte)(totalG / count), (byte)(totalB / count));
+            }
+#pragma warning disable CA1031 // fallback to pink on any error
+            catch
+#pragma warning restore CA1031
             {
                 return new Color(0xE91E63);
             }
-
-            byte r = (byte)(totalR / count);
-            byte g = (byte)(totalG / count);
-            byte b = (byte)(totalB / count);
-
-            return new Color(r, g, b);
         }
 
         private static async Task<IUser?> ResolveUser(string input, SocketUserMessage message, DiscordSocketClient client)
