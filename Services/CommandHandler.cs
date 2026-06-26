@@ -6,6 +6,7 @@ using ShiggyBot.Commands.Moderation;
 using ShiggyBot.Commands.Core;
 using ShiggyBot.Commands.Search;
 using ShiggyBot.Commands.Fun;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Components.V2;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
@@ -20,13 +21,15 @@ namespace ShiggyBot.Services
         private readonly List<ICommand> _commandList = [];
         private readonly DatabaseService _db;
         private readonly PluginService _pluginService;
+        private readonly ComponentsV1Client? _v1Client;
         private readonly ComponentsV2Client? _v2Client;
-        public CommandHandler(DiscordSocketClient client, string prefix, DatabaseService db, ComponentsV2Client? v2Client = null)
+        public CommandHandler(DiscordSocketClient client, string prefix, DatabaseService db, ComponentsV1Client? v1Client = null, ComponentsV2Client? v2Client = null)
         {
             _client = client;
             Prefix = prefix ?? "S";
             _db = db;
             _pluginService = new PluginService();
+            _v1Client = v1Client;
             _v2Client = v2Client;
             RegisterCommands();
             Console.WriteLine($"[INIT] Registered {_commands.Count} command(s)");
@@ -63,6 +66,12 @@ namespace ShiggyBot.Services
 
             // Fun Commands
             Register(new MpregCommand());
+
+            // V1 Components Test Command
+            if (_v1Client is not null)
+            {
+                Register(new V1TestCommand(_v1Client));
+            }
 
             // V2 Components Test Command
             if (_v2Client is not null)
