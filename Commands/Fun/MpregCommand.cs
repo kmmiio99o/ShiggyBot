@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
 using ShiggyBot.Utils;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Processing;
 using Color = Discord.Color;
 using Image = SixLabors.ImageSharp.Image;
@@ -30,7 +32,10 @@ namespace ShiggyBot.Commands.Fun
         private const float HeadR = 8f;
 
         private static readonly HttpClient _http = new();
-        private static string BasePngPath => Path.Combine(AppContext.BaseDirectory, "assets", "mpreg.png");
+        private static readonly string BasePngPath = Path.Combine(AppContext.BaseDirectory, "assets", "mpreg.png");
+        private static readonly byte[] BaseImageBytes = File.ReadAllBytes(BasePngPath);
+        private static readonly ConcurrentDictionary<string, string> ResultCache = new();
+        private static readonly string CacheDir = Path.Combine(Path.GetTempPath(), "shiggybot_mpreg");
 
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
@@ -53,12 +58,45 @@ namespace ShiggyBot.Commands.Fun
             string avatarUrl = target.GetAvatarUrl(ImageFormat.Png, 256)
                 ?? target.GetDefaultAvatarUrl();
 
+            string cacheKey = $"{target.Id}:{avatarUrl}";
+            string avatarHash = avatarUrl.Split('/').Last().Split('.').First().Split('?').First();
+            string fileName = $"mpreg_{target.Id}_{avatarHash}.png";
+
+            if (!ResultCache.TryGetValue(cacheKey, out string? cachedPath))
+            {
+                cachedPath = Path.Combine(CacheDir, fileName);
+                if (File.Exists(cachedPath))
+                {
+                    ResultCache[cacheKey] = cachedPath;
+                }
+                else
+                {
+                    cachedPath = null;
+                }
+            }
+
+            if (cachedPath is not null)
+            {
+                Embed cachedEmbed = new EmbedBuilder()
+                    .WithImageUrl($"attachment://{fileName}")
+                    .WithAuthor(target)
+                    .WithFooter($"Requested by {message.Author.GlobalName ?? message.Author.Username}")
+                    .WithColor(new Color(0xE91E63))
+                    .Build();
+
+                using FileStream cachedStream = File.OpenRead(cachedPath);
+                await message.Channel.SendFileAsync(cachedStream, fileName, embed: cachedEmbed).ConfigureAwait(false);
+                return;
+            }
+
             byte[] avatarData = await _http.GetByteArrayAsync(new Uri(avatarUrl)).ConfigureAwait(false);
+            (Color embedColor, byte[] imageBytes) = GenerateMpregImage(avatarData);
 
-            string fileName = $"mpreg_{target.Id}.png";
-            string filePath = Path.Combine(Path.GetTempPath(), fileName);
+            Directory.CreateDirectory(CacheDir);
+            string filePath = Path.Combine(CacheDir, fileName);
+            await File.WriteAllBytesAsync(filePath, imageBytes).ConfigureAwait(false);
 
-            Color embedColor = GenerateMpregImage(avatarData, filePath);
+            ResultCache[cacheKey] = filePath;
 
             Embed embed = new EmbedBuilder()
                 .WithImageUrl($"attachment://{fileName}")
@@ -67,19 +105,8 @@ namespace ShiggyBot.Commands.Fun
                 .WithColor(embedColor)
                 .Build();
 
-            using FileStream stream = File.OpenRead(filePath);
-            await message.Channel.SendFileAsync(stream, fileName, embed: embed).ConfigureAwait(false);
-
-            try
-            {
-                File.Delete(filePath);
-            }
-            catch (IOException)
-            {
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
+            using MemoryStream ms = new(imageBytes);
+            await message.Channel.SendFileAsync(ms, fileName, embed: embed).ConfigureAwait(false);
         }
 
         private static async Task<IUser?> ResolveUser(string input, SocketUserMessage message, DiscordSocketClient client)
@@ -114,11 +141,11 @@ namespace ShiggyBot.Commands.Fun
             return null;
         }
 
-        private static Color GenerateMpregImage(byte[] avatarData, string outputPath)
+        private static (Color, byte[]) GenerateMpregImage(byte[] avatarData)
         {
             try
             {
-                using Image<Rgba32> baseImage = Image.Load<Rgba32>(BasePngPath);
+                using Image<Rgba32> baseImage = Image.Load<Rgba32>(BaseImageBytes);
 
                 float scale = OutputSize / SvgViewBox;
                 float headX = HeadCx * scale;
@@ -169,11 +196,15 @@ namespace ShiggyBot.Commands.Fun
                 });
 
                 baseImage.Mutate(ctx => ctx.DrawImage(avatar, new Point((int)(headX - headRadius), (int)(headY - headRadius)), 1f));
-                baseImage.Save(outputPath);
 
-                return colorCount > 0
+                using MemoryStream ms = new();
+                baseImage.Save(ms, new PngEncoder());
+
+                Color color = colorCount > 0
                     ? new Color((byte)(totalR / colorCount), (byte)(totalG / colorCount), (byte)(totalB / colorCount))
                     : new Color(0xE91E63);
+
+                return (color, ms.ToArray());
             }
             catch (InvalidOperationException)
             {
