@@ -1,9 +1,10 @@
 using System.Text;
+using Discord.Rest;
 using Discord.WebSocket;
 using ShiggyBot.Components.V2;
 using ShiggyBot.Utils;
 
-namespace ShiggyBot.Commands.Utility
+namespace ShiggyBot.Commands.Core
 {
     /// <summary>
     /// Command to test Discord's Components V2 message format.
@@ -29,7 +30,7 @@ namespace ShiggyBot.Commands.Utility
         public string Description => "Test Discord Components V2 message format";
 
         /// <summary>Gets the command category.</summary>
-        public string Category => "Utility";
+        public string Category => "Core";
 
         /// <summary>Gets the command aliases.</summary>
         public IReadOnlyList<string> Aliases => [];
@@ -40,6 +41,12 @@ namespace ShiggyBot.Commands.Utility
             ArgumentNullException.ThrowIfNull(message);
             ArgumentNullException.ThrowIfNull(args);
             ArgumentNullException.ThrowIfNull(client);
+
+            RestApplication application = await client.GetApplicationInfoAsync().ConfigureAwait(false);
+            if (message.Author.Id != application.Owner.Id)
+            {
+                return;
+            }
 
             bool showRaw = args.Length > 0 && args[0].Equals("raw", StringComparison.OrdinalIgnoreCase);
 

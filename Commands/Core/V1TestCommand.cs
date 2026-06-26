@@ -1,7 +1,8 @@
+using Discord.Rest;
 using Discord.WebSocket;
 using ShiggyBot.Components.V1;
 
-namespace ShiggyBot.Commands.Utility
+namespace ShiggyBot.Commands.Core
 {
     internal sealed class V1TestCommand : ICommand
     {
@@ -17,7 +18,7 @@ namespace ShiggyBot.Commands.Utility
 
         public string Description => "Test Discord V1 message format (buttons, embeds, etc.)";
 
-        public string Category => "Utility";
+        public string Category => "Core";
 
         public IReadOnlyList<string> Aliases => [];
 
@@ -26,6 +27,12 @@ namespace ShiggyBot.Commands.Utility
             ArgumentNullException.ThrowIfNull(message);
             ArgumentNullException.ThrowIfNull(args);
             ArgumentNullException.ThrowIfNull(client);
+
+            RestApplication application = await client.GetApplicationInfoAsync().ConfigureAwait(false);
+            if (message.Author.Id != application.Owner.Id)
+            {
+                return;
+            }
 
             V1MessageBuilder builder = new V1MessageBuilder()
                 .WithContent("Hello from **ShiggyBot** V1 components!")
