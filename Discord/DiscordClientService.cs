@@ -1,6 +1,7 @@
 using Discord;
 using Discord.WebSocket;
 using Microsoft.Data.Sqlite;
+using ShiggyBot.Components.V2;
 using ShiggyBot.Configuration;
 using ShiggyBot.Utils;
 using ShiggyBot.Features;
@@ -20,6 +21,7 @@ namespace ShiggyBot.Discord
         private readonly CommandHandler _commandHandler;
         private readonly DatabaseService _db;
         private readonly BanCheckService _banCheck;
+        private readonly ComponentsV2Client? _v2Client;
         private AutoroleFeature? _autorole;
         private PresenceFeature? _presence;
         private GitHubStatsService? _gitHubStats;
@@ -59,8 +61,11 @@ namespace ShiggyBot.Discord
             // Initialize database
             _db = new();
 
+            // Initialize Components V2 client (optional — for Components V2 message features)
+            _v2Client = string.IsNullOrWhiteSpace(config.Token) ? null : new ComponentsV2Client(config.Token);
+
             // Initialize command handling (pass database)
-            _commandHandler = new(_client, config.Prefix, _db);
+            _commandHandler = new(_client, config.Prefix, _db, _v2Client);
             Logger.Info("[INIT] Command handler initialized");
 
             // Initialize ban check service
@@ -285,6 +290,7 @@ namespace ShiggyBot.Discord
             _banCheck?.Dispose();
             _commandHandler?.Dispose();
             _gitHubWebhook?.Dispose();
+            _v2Client?.Dispose();
             _db?.Dispose();
             _client?.Dispose();
             GC.SuppressFinalize(this);
