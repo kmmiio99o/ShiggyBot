@@ -161,6 +161,73 @@ namespace ShiggyBot.Components.V2
             return true;
         }
 
+        /// <summary>Sends a raw JSON payload as a new message (supports mixed V1+V2 components).</summary>
+        public async Task<bool> SendRawPayloadAsync(
+            ulong channelId,
+            byte[] payload,
+            CancellationToken cancellationToken = default)
+        {
+            Uri url = new($"{_baseUrl}/channels/{channelId}/messages");
+            using ByteArrayContent content = new(payload);
+            content.Headers.ContentType = JsonContentType;
+            using HttpResponseMessage response = await _http.PostAsync(url, content, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string? body = null;
+                try
+                {
+                    body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                Logger.Error($"[V2] Failed to send raw payload: {response.StatusCode} {body}");
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Edits an existing message with a raw JSON payload (supports mixed V1+V2 components).</summary>
+        public async Task<bool> EditRawPayloadAsync(
+            ulong channelId,
+            ulong messageId,
+            byte[] payload,
+            CancellationToken cancellationToken = default)
+        {
+            Uri url = new($"{_baseUrl}/channels/{channelId}/messages/{messageId}");
+            using ByteArrayContent content = new(payload);
+            content.Headers.ContentType = JsonContentType;
+            using HttpResponseMessage response = await _http.PatchAsync(url, content, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string? body = null;
+                try
+                {
+                    body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                }
+                catch (InvalidOperationException)
+                {
+                }
+
+                Logger.Error($"[V2] Failed to edit raw payload: {response.StatusCode} {body}");
+                return false;
+            }
+
+            return true;
+        }
+
         /// <summary>Disposes the underlying HttpClient.</summary>
         public void Dispose()
         {

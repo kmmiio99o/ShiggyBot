@@ -8,6 +8,7 @@ using ShiggyBot.Utils;
 using ShiggyBot.Features;
 using ShiggyBot.Data;
 using ShiggyBot.Commands;
+using ShiggyBot.Commands.Utility;
 using ShiggyBot.Services;
 using ShiggyBot.Services.GitHub;
 using Microsoft.Extensions.Configuration;
@@ -241,31 +242,41 @@ namespace ShiggyBot.Discord
                 if (categories.TryGetValue(selectedCategory, out List<ICommand>? commands))
                 {
                     string prefix = _commandHandler.Prefix;
-                    Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
 
-                    // Rebuild select menu for navigation
-                    SelectMenuBuilder menu = new()
+                    if (_v2Client is not null)
                     {
-                        CustomId = "help_category_select",
-                        Placeholder = "Select a category...",
-                        MinValues = 1,
-                        MaxValues = 1
-                    };
+                        await component.DeferAsync().ConfigureAwait(false);
 
-                    foreach (KeyValuePair<string, List<ICommand>> category in categories)
-                    {
-                        string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
-                        string keyLower = category.Key.ToUpperInvariant();
-                        menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                        byte[] payload = HelpCommand.BuildCategoryHelpPayload(selectedCategory, commands, prefix, categories);
+                        await _v2Client.EditRawPayloadAsync(component.ChannelId!.Value, component.Message.Id, payload).ConfigureAwait(false);
                     }
-
-                    MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
-
-                    await component.UpdateAsync(msg =>
+                    else
                     {
-                        msg.Embed = embed;
-                        msg.Components = messageComponents;
-                    }).ConfigureAwait(false);
+                        Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
+
+                        SelectMenuBuilder menu = new()
+                        {
+                            CustomId = "help_category_select",
+                            Placeholder = "Select a category...",
+                            MinValues = 1,
+                            MaxValues = 1
+                        };
+
+                        foreach (KeyValuePair<string, List<ICommand>> category in categories)
+                        {
+                            string emoji = EmbedHelper.GetCategoryEmoji(category.Key);
+                            string keyLower = category.Key.ToUpperInvariant();
+                            menu.AddOption(category.Key, keyLower, $"View {keyLower} commands", new Emoji(emoji));
+                        }
+
+                        MessageComponent messageComponents = new ComponentBuilder().WithSelectMenu(menu).Build();
+
+                        await component.UpdateAsync(msg =>
+                        {
+                            msg.Embed = embed;
+                            msg.Components = messageComponents;
+                        }).ConfigureAwait(false);
+                    }
                 }
             }
             catch (InvalidOperationException ex)
