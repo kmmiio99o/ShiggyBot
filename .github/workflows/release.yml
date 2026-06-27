@@ -85,12 +85,12 @@ jobs:
             | Key | Description |
             |-----|-------------|
             | `DISCORD_TOKEN` | Your bot token from the [Discord Developer Portal](https://discord.com/developers/applications) |
-            | `PREFIX` | `S` | Command prefix |
 
             ### Optional
 
             | Key | Default | Description |
             |-----|---------|-------------|
+            | `PREFIX` | `S` | Command prefix |
             | `WELCOME_ROLE_ID` | — | Role ID assigned to new members on join |
             | `PRESENCE_STATUS` | `online` | Bot status (`online`, `idle`, `dnd`, `invisible`) |
             | `PRESENCE_INTERVAL` | `300` | Presence rotation interval in seconds |
