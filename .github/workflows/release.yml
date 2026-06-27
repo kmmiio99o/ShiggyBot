@@ -67,26 +67,57 @@ jobs:
           body: >
             **ShiggyBot v${{ env.VERSION }}**
 
-            **Requirements**
+            Self-contained Discord bot built with .NET 10 and Discord.Net 3.20.1.
 
-            Create a `config.txt` file next to the executable with your bot token:
 
-            ```
-            # Discord bot token (required)
-            DISCORD_TOKEN=your_token_here
+            ## ⚙️ Configuration
 
-            # Command prefix (default: S)
-            PREFIX=S
-            ```
+            Config is loaded from these sources (later overrides earlier):
+              1. `appsettings.json` (optional, next to the executable)
+              2. Environment variables
+              3. `config.txt` (optional, INI-style `KEY=VALUE`, `#` comments)
 
-            A `config.example.txt` is included in the archive — rename and edit it.
-            Alternatively, set the `DISCORD_TOKEN` environment variable.
+            A `config.example.txt` is included in the archive. Rename it to `config.txt`
+            and edit with your values.
 
-            ---
+            ### Required
 
-            **What's included**
+            | Key | Description |
+            |-----|-------------|
+            | `DISCORD_TOKEN` | Your bot token from the [Discord Developer Portal](https://discord.com/developers/applications) |
+            | `PREFIX` | `S` | Command prefix |
 
-            - Single-file self-contained executable (no .NET runtime needed)
-            - `config.example.txt`
+            ### Optional
+
+            | Key | Default | Description |
+            |-----|---------|-------------|
+            | `WELCOME_ROLE_ID` | — | Role ID assigned to new members on join |
+            | `PRESENCE_STATUS` | `online` | Bot status (`online`, `idle`, `dnd`, `invisible`) |
+            | `PRESENCE_INTERVAL` | `300` | Presence rotation interval in seconds |
+            | `LOG_WEBHOOK_URL` | — | Discord webhook URL for error logging |
+            | `HF_TOKEN` | — | Hugging Face API token for AI commands (`Sai`) |
+            | `GITHUB_TOKEN` | — | GitHub personal access token (higher API rate limits) |
+            | `GITHUB_REPO` | — | GitHub repo for commit/PR/star monitoring (`owner/repo`) |
+            | `GITHUB_WEBHOOK_CHANNEL_ID` | — | Discord channel ID for GitHub notifications |
+            | `DEV_GUILD_ID` | — | Guild ID for development commands |
+
+
+            ## 📦 What's included
+
+            - **Single-file executable** — self-contained, no .NET runtime needed
+            - **SQLite database** (`shiggybot.db`) — created automatically on first run for timed bans,
+              disabled commands, and guild config
+            - **`config.example.txt`** — template configuration file
+
+
+            ## 🔧 System requirements
+
+            - **Windows x64**, **Linux x64**, or **macOS x64**
+            - No .NET runtime required (self-contained)
+            - Network access to `discord.com` and `api.github.com`
+
+
+            ## 🆕 What's new in v${{ env.VERSION }}
+
           files: ShiggyBot-*.zip
           generate_release_notes: true
