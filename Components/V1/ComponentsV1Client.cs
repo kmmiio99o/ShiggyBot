@@ -130,38 +130,71 @@ namespace ShiggyBot.Components.V1
 
         private static ByteArrayContent BuildMultipartContent(byte[] payloadJson, V1MessageBuilder builder)
         {
-            string boundary = $"ShiggyBot_{Guid.NewGuid():N}";
+            ReadOnlySpan<byte> crlf = "\r\n"u8;
+            ReadOnlySpan<byte> dashDash = "--"u8;
+            byte[] boundaryBytes = Encoding.UTF8.GetBytes($"boundary_ShiggyBot_{Guid.NewGuid():N}");
 
-            using MemoryStream ms = new();
-            WriteMultipartPart(ms, boundary, "payload_json", "application/json", payloadJson);
+            int totalSize = crlf.Length + dashDash.Length + boundaryBytes.Length +
+                "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n"u8.Length +
+                payloadJson.Length;
 
             foreach (V1Attachment attachment in builder.Attachments)
             {
-                WriteMultipartFile(ms, boundary, attachment);
+                totalSize += crlf.Length + dashDash.Length + boundaryBytes.Length;
+                totalSize += "\r\nContent-Disposition: form-data; name=\"files["u8.Length;
+                totalSize += Formatting.CountDigits(attachment.Id);
+                totalSize += "]\"; filename=\""u8.Length;
+                totalSize += Encoding.UTF8.GetByteCount(attachment.FileName);
+                totalSize += "\"\r\nContent-Type: application/octet-stream\r\n\r\n"u8.Length;
+                totalSize += attachment.Data.Length;
             }
 
-            ms.Write(Encoding.UTF8.GetBytes($"\r\n--{boundary}--\r\n"));
+            totalSize += crlf.Length + dashDash.Length + boundaryBytes.Length + dashDash.Length + crlf.Length;
 
-            ByteArrayContent content = new(ms.ToArray());
+            byte[] buffer = new byte[totalSize];
+            int offset = 0;
+
+            offset = Write(buffer, offset, crlf);
+            offset = Write(buffer, offset, dashDash);
+            offset = Write(buffer, offset, boundaryBytes);
+            offset = Write(buffer, offset, "\r\nContent-Disposition: form-data; name=\"payload_json\"\r\nContent-Type: application/json\r\n\r\n"u8);
+            offset = Write(buffer, offset, payloadJson);
+
+            foreach (V1Attachment attachment in builder.Attachments)
+            {
+                offset = Write(buffer, offset, crlf);
+                offset = Write(buffer, offset, dashDash);
+                offset = Write(buffer, offset, boundaryBytes);
+                offset = Write(buffer, offset, "\r\nContent-Disposition: form-data; name=\"files["u8);
+                offset = Formatting.WriteInt32(buffer, offset, attachment.Id);
+                offset = Write(buffer, offset, "]\"; filename=\""u8);
+                offset = Write(buffer, offset, Encoding.UTF8.GetBytes(attachment.FileName));
+                offset = Write(buffer, offset, "\"\r\nContent-Type: application/octet-stream\r\n\r\n"u8);
+                offset = Write(buffer, offset, attachment.Data);
+            }
+
+            offset = Write(buffer, offset, crlf);
+            offset = Write(buffer, offset, dashDash);
+            offset = Write(buffer, offset, boundaryBytes);
+            offset = Write(buffer, offset, dashDash);
+            Write(buffer, offset, crlf);
+
+            ByteArrayContent content = new(buffer);
             content.Headers.ContentType = new MediaTypeHeaderValue("multipart/form-data");
-            content.Headers.ContentType.Parameters.Add(new NameValueHeaderValue("boundary", boundary));
+            content.Headers.ContentType.Parameters.Add(new NameValueHeaderValue("boundary", Encoding.UTF8.GetString(boundaryBytes)));
             return content;
         }
 
-        private static void WriteMultipartPart(Stream stream, string boundary, string name, string contentType, byte[] data)
+        private static int Write(byte[] buffer, int offset, ReadOnlySpan<byte> data)
         {
-            stream.Write(Encoding.UTF8.GetBytes($"--{boundary}\r\n"));
-            stream.Write(Encoding.UTF8.GetBytes($"Content-Disposition: form-data; name=\"{name}\"\r\n"));
-            stream.Write(Encoding.UTF8.GetBytes($"Content-Type: {contentType}\r\n\r\n"));
-            stream.Write(data);
+            data.CopyTo(buffer.AsSpan(offset));
+            return offset + data.Length;
         }
 
-        private static void WriteMultipartFile(Stream stream, string boundary, V1Attachment attachment)
+        private static int Write(byte[] buffer, int offset, byte[] data)
         {
-            stream.Write(Encoding.UTF8.GetBytes($"--{boundary}\r\n"));
-            stream.Write(Encoding.UTF8.GetBytes($"Content-Disposition: form-data; name=\"files[{attachment.Id}]\"; filename=\"{attachment.FileName}\"\r\n"));
-            stream.Write(Encoding.UTF8.GetBytes("Content-Type: application/octet-stream\r\n\r\n"));
-            stream.Write(attachment.Data);
+            data.CopyTo(buffer.AsSpan(offset));
+            return offset + data.Length;
         }
     }
 }
