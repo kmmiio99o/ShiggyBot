@@ -64,7 +64,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
-          body: >
+          body: |
             **ShiggyBot v${{ env.VERSION }}**
 
             Self-contained Discord bot built with .NET 10 and Discord.Net 3.20.1.
