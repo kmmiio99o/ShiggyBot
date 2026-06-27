@@ -1,37 +1,28 @@
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to kick a user from the server.
-    /// </summary>
     internal sealed class KickCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal KickCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "kick";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Kick a user from the server";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -53,16 +44,16 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length < offset)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Kick Command",
-                    Description = "Remove a user from the server temporarily",
-                    Color = new Color(0xFFA500)
-                };
-                usageEmbed.AddField("Usage", "`kick <user> [reason]`", inline: false);
-                usageEmbed.AddField("Reply Usage", "Reply to a message with `kick [reason]`", inline: false);
-                usageEmbed.AddField("Example", "`kick @user Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Kick Command")
+                        .WithDescription("Remove a user from the server temporarily")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`kick <user> [reason]`", false)
+                        .AddField("Reply Usage", "Reply to a message with `kick [reason]`", false)
+                        .AddField("Example", "`kick @user Breaking rules`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -73,7 +64,13 @@ namespace ShiggyBot.Commands.Moderation
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("User not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -82,22 +79,29 @@ namespace ShiggyBot.Commands.Moderation
             try
             {
                 await user.KickAsync(reason).ConfigureAwait(false);
-                EmbedBuilder embed = new()
-                {
-                    Title = "🛡️ User Kicked",
-                    Color = new Color(0xFFA500),
-                    ThumbnailUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl()
-                };
-                embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                embed.AddField("Moderator", message.Author.Username, inline: true);
-                embed.AddField("Reason", reason, inline: false);
-                embed.WithFooter("Kick action completed");
-                embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+
+                V1MessageBuilder builder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ User Kicked")
+                        .WithColor(0xFFA500)
+                        .WithThumbnail(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
+                        .AddField("User", $"{user.Username}#{user.Discriminator}", true)
+                        .AddField("Moderator", message.Author.Username, true)
+                        .AddField("Reason", reason, false)
+                        .WithFooter("Kick action completed")
+                        .WithTimestamp(DateTimeOffset.UtcNow));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to kick user. Check role hierarchy.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to kick user. Check role hierarchy.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
     }

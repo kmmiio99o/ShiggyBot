@@ -1,38 +1,29 @@
 using System.Globalization;
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to timeout a user.
-    /// </summary>
     internal sealed class TimeoutCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal TimeoutCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "timeout";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Timeout a user for a specified duration";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -54,17 +45,17 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length < offset + 1)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Timeout Command",
-                    Description = "Temporarily mute a user from chatting",
-                    Color = new Color(0xFFA500)
-                };
-                usageEmbed.AddField("Usage", "`timeout <user> <duration> [reason]`", inline: false);
-                usageEmbed.AddField("Reply Usage", "Reply to a message with `timeout <duration> [reason]`", inline: false);
-                usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days", inline: false);
-                usageEmbed.AddField("Example", "`timeout @user 10m Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Timeout Command")
+                        .WithDescription("Temporarily mute a user from chatting")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`timeout <user> <duration> [reason]`", false)
+                        .AddField("Reply Usage", "Reply to a message with `timeout <duration> [reason]`", false)
+                        .AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days", false)
+                        .AddField("Example", "`timeout @user 10m Breaking rules`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -75,14 +66,20 @@ namespace ShiggyBot.Commands.Moderation
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("User not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
             string durationArg = args[offset];
             string reason = args.Length > offset + 1 ? string.Join(" ", args, offset + 1, args.Length - (offset + 1)) : "No reason provided";
 
-            TimeSpan duration = TimeSpan.FromMinutes(5); // default
+            TimeSpan duration = TimeSpan.FromMinutes(5);
             if (durationArg.EndsWith('s'))
             {
                 duration = TimeSpan.FromSeconds(int.Parse(durationArg.TrimEnd('s'), CultureInfo.InvariantCulture));
@@ -103,23 +100,30 @@ namespace ShiggyBot.Commands.Moderation
             try
             {
                 await user.SetTimeOutAsync(duration, new RequestOptions { AuditLogReason = reason }).ConfigureAwait(false);
-                EmbedBuilder embed = new()
-                {
-                    Title = "🛡️ User Timed Out",
-                    Color = new Color(0xFFA500),
-                    ThumbnailUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl()
-                };
-                embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                embed.AddField("Moderator", message.Author.Username, inline: true);
-                embed.AddField("Duration", $"{duration.TotalMinutes} minute(s)", inline: true);
-                embed.AddField("Reason", reason, inline: false);
-                embed.WithFooter("Timeout action completed");
-                embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+
+                V1MessageBuilder builder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ User Timed Out")
+                        .WithColor(0xFFA500)
+                        .WithThumbnail(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
+                        .AddField("User", $"{user.Username}#{user.Discriminator}", true)
+                        .AddField("Moderator", message.Author.Username, true)
+                        .AddField("Duration", $"{duration.TotalMinutes} minute(s)", true)
+                        .AddField("Reason", reason, false)
+                        .WithFooter("Timeout action completed")
+                        .WithTimestamp(DateTimeOffset.UtcNow));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to timeout user. Check role hierarchy.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to timeout user. Check role hierarchy.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
     }

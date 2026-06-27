@@ -1,46 +1,33 @@
 using System.Globalization;
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to ban a user from the server.
-    /// </summary>
     internal sealed class BanCommand : ICommand
     {
+        private readonly ComponentsV1Client _v1Client;
         private readonly DatabaseService _db;
 
-        internal BanCommand(DatabaseService db)
+        internal BanCommand(ComponentsV1Client v1Client, DatabaseService db)
         {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            ArgumentNullException.ThrowIfNull(db);
+            _v1Client = v1Client;
             _db = db;
         }
 
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
         public string Name => "ban";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Ban a user from the server (supports timed bans)";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -62,17 +49,17 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length < offset)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Ban Command",
-                    Description = "Permanently ban a user from the server",
-                    Color = new Color(0xFFA500)
-                };
-                _ = usageEmbed.AddField("Usage", "`ban <user> [duration] [reason]`", inline: false);
-                _ = usageEmbed.AddField("Reply Usage", "Reply to a message with `ban [duration] [reason]`", inline: false);
-                _ = usageEmbed.AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days (optional)", inline: false);
-                _ = usageEmbed.AddField("Example", "`ban @user 7d Breaking rules`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Ban Command")
+                        .WithDescription("Permanently ban a user from the server")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`ban <user> [duration] [reason]`", false)
+                        .AddField("Reply Usage", "Reply to a message with `ban [duration] [reason]`", false)
+                        .AddField("Duration Format", "s = seconds, m = minutes, h = hours, d = days (optional)", false)
+                        .AddField("Example", "`ban @user 7d Breaking rules`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -83,7 +70,13 @@ namespace ShiggyBot.Commands.Moderation
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("User not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -103,34 +96,41 @@ namespace ShiggyBot.Commands.Moderation
             {
                 await user.BanAsync(deleteDays, reason).ConfigureAwait(false);
 
-                // If timed ban, add to database
                 if (duration.HasValue)
                 {
                     DateTime unbanTime = DateTime.UtcNow.Add(duration.Value);
                     await _db.AddTimedBanAsync(guild.Id, user.Id, unbanTime, reason, message.Author.Id).ConfigureAwait(false);
                 }
 
-                EmbedBuilder embed = new()
-                {
-                    Title = "🛡️ User Banned",
-                    Color = new Color(0xFF0000),
-                    ThumbnailUrl = user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl()
-                };
-                _ = embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                _ = embed.AddField("Moderator", message.Author.Username, inline: true);
-                _ = embed.AddField("Reason", reason, inline: false);
+                V1EmbedBuilder embed = new V1EmbedBuilder()
+                    .WithTitle("🛡️ User Banned")
+                    .WithColor(0xFF0000)
+                    .WithThumbnail(user.GetAvatarUrl() ?? user.GetDefaultAvatarUrl())
+                    .AddField("User", $"{user.Username}#{user.Discriminator}", true)
+                    .AddField("Moderator", message.Author.Username, true)
+                    .AddField("Reason", reason, false);
+
                 if (duration.HasValue)
                 {
-                    _ = embed.AddField("Duration", $"{duration.Value.TotalDays} day(s)", inline: true);
+                    embed.AddField("Duration", $"{duration.Value.TotalDays} day(s)", true);
                 }
-                _ = embed.AddField("Delete Messages", $"Last {deleteDays} day(s)", inline: true);
+
+                embed.AddField("Delete Messages", $"Last {deleteDays} day(s)", true);
                 embed.WithFooter("Ban action completed");
-                embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+                embed.WithTimestamp(DateTimeOffset.UtcNow);
+
+                V1MessageBuilder builder = new V1MessageBuilder().AddEmbed(embed);
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to ban user. Check role hierarchy.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to ban user. Check role hierarchy.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
 

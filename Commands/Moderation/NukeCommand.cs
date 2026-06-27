@@ -1,38 +1,28 @@
 using Discord;
-using Discord.Rest;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to nuke a channel by cloning and deleting it.
-    /// </summary>
     internal sealed class NukeCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal NukeCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "nuke";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Clone and delete a channel to remove all messages (Administrator only)";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -57,41 +47,30 @@ namespace ShiggyBot.Commands.Moderation
 
             string? reasonHint = args.Length > 0 ? string.Join(" ", args) : null;
 
-            EmbedBuilder confirmEmbed = new()
-            {
-                Title = "⚠️ Nuke Channel",
-                Description = $"Are you sure you want to nuke #{guildChannel.Name}? This will delete ALL messages and recreate the channel.",
-                Color = new Color(0xFFA500)
-            };
-            confirmEmbed.AddField("Channel", $"#{guildChannel.Name}", inline: true);
-            confirmEmbed.AddField("Reason", reasonHint ?? "None", inline: true);
-            confirmEmbed.AddField("To confirm", $"`Snuke confirm{(reasonHint != null ? " " + reasonHint : "")}`", inline: false);
-            confirmEmbed.WithFooter("This action cannot be undone!");
-            RestUserMessage confirmation = await message.Channel.SendMessageAsync(embed: confirmEmbed.Build()).ConfigureAwait(false);
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await Task.Delay(5_000).ConfigureAwait(false);
-                    await confirmation.DeleteAsync().ConfigureAwait(false);
-                }
-                catch (HttpRequestException)
-                {
-                }
-                catch (InvalidOperationException)
-                {
-                }
-                catch (OperationCanceledException)
-                {
-                }
-            });
+            V1MessageBuilder confirmBuilder = new V1MessageBuilder()
+                .AddEmbed(new V1EmbedBuilder()
+                    .WithTitle("⚠️ Nuke Channel")
+                    .WithDescription($"Are you sure you want to nuke #{guildChannel.Name}? This will delete ALL messages and recreate the channel.")
+                    .WithColor(0xFFA500)
+                    .AddField("Channel", $"#{guildChannel.Name}", true)
+                    .AddField("Reason", reasonHint ?? "None", true)
+                    .AddField("To confirm", $"`Snuke confirm{(reasonHint != null ? " " + reasonHint : "")}`", false)
+                    .WithFooter("This action cannot be undone!"));
+
+            await _v1Client.SendMessageAsync(message.Channel.Id, confirmBuilder).ConfigureAwait(false);
         }
 
-        private static async Task NukeChannelAsync(SocketGuildChannel channel, SocketUserMessage message, string reason)
+        private async Task NukeChannelAsync(SocketGuildChannel channel, SocketUserMessage message, string reason)
         {
             if (channel is not ITextChannel textChannel)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Can only nuke text channels.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Can only nuke text channels.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -135,18 +114,24 @@ namespace ShiggyBot.Commands.Moderation
 
                 await channel.DeleteAsync().ConfigureAwait(false);
 
-                EmbedBuilder embed = new()
-                {
-                    Title = "💥 Channel Nuked!",
-                    Description = $"This channel has been reset!\n**Reason:** {reason}\n**Moderator:** {message.Author.Mention}",
-                    Color = new Color(0x00FF00)
-                };
-                embed.WithCurrentTimestamp();
-                await newChannel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+                V1MessageBuilder nukeBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("💥 Channel Nuked!")
+                        .WithDescription($"This channel has been reset!\n**Reason:** {reason}\n**Moderator:** {message.Author.Mention}")
+                        .WithColor(0x00FF00)
+                        .WithTimestamp(DateTimeOffset.UtcNow));
+
+                await _v1Client.SendMessageAsync(newChannel.Id, nukeBuilder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to nuke channel. Check bot permissions.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to nuke channel. Check bot permissions.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
     }

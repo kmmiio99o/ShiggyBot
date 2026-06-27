@@ -43,47 +43,40 @@ namespace ShiggyBot.Services
 
         private void RegisterCommands()
         {
-            // Utility Commands
-            Register(new PingCommand());
-            if (_v2Client is not null)
-            {
-                Register(new HelpCommand(this, _v2Client));
-            }
-
-            Register(new NoteCommand());
-
-            // Moderation Commands
-            Register(new KickCommand());
-            Register(new BanCommand(_db));
-            Register(new TimeoutCommand());
-            Register(new PurgeCommand());
-            Register(new AddRoleCommand());
-            Register(new RemoveRoleCommand());
-            Register(new NukeCommand());
-            Register(new DisableCommand(_db));
-            Register(new EnableCommand(_db));
-            Register(new SetWelcomeCommand(_db));
-
-            // Search Commands
-            if (_v2Client is not null)
-            {
-                Register(new PluginCommand(_pluginService, _v2Client));
-            }
-
-            Register(new GoogleCommand());
-
-            // Fun Commands
-            Register(new MpregCommand());
-
-            // V1 Components Test Command
+            // V1-based Commands
             if (_v1Client is not null)
             {
+                // Utility Commands
+                Register(new PingCommand(_v1Client));
+                Register(new NoteCommand(_v1Client));
+
+                // Moderation Commands
+                Register(new KickCommand(_v1Client));
+                Register(new BanCommand(_v1Client, _db));
+                Register(new TimeoutCommand(_v1Client));
+                Register(new PurgeCommand(_v1Client));
+                Register(new AddRoleCommand(_v1Client));
+                Register(new RemoveRoleCommand(_v1Client));
+                Register(new NukeCommand(_v1Client));
+                Register(new DisableCommand(_v1Client, _db));
+                Register(new EnableCommand(_v1Client, _db));
+                Register(new SetWelcomeCommand(_v1Client, _db));
+
+                // Search Commands
+                Register(new GoogleCommand(_v1Client));
+
+                // Fun Commands
+                Register(new MpregCommand(_v1Client));
+
+                // V1 Components Test Command
                 Register(new V1TestCommand(_v1Client));
             }
 
-            // V2 Components Test Command
+            // V2-based Commands
             if (_v2Client is not null)
             {
+                Register(new HelpCommand(this, _v2Client));
+                Register(new PluginCommand(_pluginService, _v2Client));
                 Register(new V2TestCommand(_v2Client));
             }
         }

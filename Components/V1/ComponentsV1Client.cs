@@ -1,9 +1,9 @@
 using System.Net.Http.Headers;
+using System.Text;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Components.V1
 {
-    /// <summary>HTTP client for sending V1 messages via Discord's REST API.</summary>
     internal sealed class ComponentsV1Client : IDisposable
     {
         private static readonly MediaTypeHeaderValue JsonContentType = new("application/json");
@@ -11,7 +11,6 @@ namespace ShiggyBot.Components.V1
         private readonly HttpClient _http;
         private readonly string _baseUrl;
 
-        /// <summary>Creates a new ComponentsV1Client.</summary>
         public ComponentsV1Client(string token, HttpClient? httpClient = null)
         {
             ArgumentNullException.ThrowIfNull(token);
@@ -21,7 +20,6 @@ namespace ShiggyBot.Components.V1
             _baseUrl = "https://discord.com/api/v10";
         }
 
-        /// <summary>Sends a V1 message to a channel.</summary>
         public async Task<bool> SendMessageAsync(
             ulong channelId,
             V1MessageBuilder builder,
@@ -34,8 +32,9 @@ namespace ShiggyBot.Components.V1
 
             for (int attempt = 0; attempt < 3; attempt++)
             {
-                using ByteArrayContent content = new(payload);
-                content.Headers.ContentType = JsonContentType;
+                using HttpContent content = builder.HasAttachments
+                    ? BuildMultipartContent(payload, builder)
+                    : BuildJsonContent(payload);
 
                 using HttpResponseMessage response = await _http.PostAsync(url, content, cancellationToken)
                     .ConfigureAwait(false);
@@ -78,7 +77,6 @@ namespace ShiggyBot.Components.V1
             return false;
         }
 
-        /// <summary>Edits a V1 message.</summary>
         public async Task<bool> EditMessageAsync(
             ulong channelId,
             ulong messageId,
@@ -118,10 +116,52 @@ namespace ShiggyBot.Components.V1
             return true;
         }
 
-        /// <summary>Disposes the underlying HttpClient.</summary>
         public void Dispose()
         {
             _http.Dispose();
+        }
+
+        private static ByteArrayContent BuildJsonContent(byte[] payload)
+        {
+            ByteArrayContent content = new(payload);
+            content.Headers.ContentType = JsonContentType;
+            return content;
+        }
+
+        private static ByteArrayContent BuildMultipartContent(byte[] payloadJson, V1MessageBuilder builder)
+        {
+            string boundary = $"ShiggyBot_{Guid.NewGuid():N}";
+
+            using MemoryStream ms = new();
+            WriteMultipartPart(ms, boundary, "payload_json", "application/json", payloadJson);
+
+            foreach (V1Attachment attachment in builder.Attachments)
+            {
+                WriteMultipartFile(ms, boundary, attachment);
+            }
+
+            ms.Write(Encoding.UTF8.GetBytes($"\r\n--{boundary}--\r\n"));
+
+            ByteArrayContent content = new(ms.ToArray());
+            content.Headers.ContentType = new MediaTypeHeaderValue("multipart/form-data");
+            content.Headers.ContentType.Parameters.Add(new NameValueHeaderValue("boundary", boundary));
+            return content;
+        }
+
+        private static void WriteMultipartPart(Stream stream, string boundary, string name, string contentType, byte[] data)
+        {
+            stream.Write(Encoding.UTF8.GetBytes($"--{boundary}\r\n"));
+            stream.Write(Encoding.UTF8.GetBytes($"Content-Disposition: form-data; name=\"{name}\"\r\n"));
+            stream.Write(Encoding.UTF8.GetBytes($"Content-Type: {contentType}\r\n\r\n"));
+            stream.Write(data);
+        }
+
+        private static void WriteMultipartFile(Stream stream, string boundary, V1Attachment attachment)
+        {
+            stream.Write(Encoding.UTF8.GetBytes($"--{boundary}\r\n"));
+            stream.Write(Encoding.UTF8.GetBytes($"Content-Disposition: form-data; name=\"files[{attachment.Id}]\"; filename=\"{attachment.FileName}\"\r\n"));
+            stream.Write(Encoding.UTF8.GetBytes("Content-Type: application/octet-stream\r\n\r\n"));
+            stream.Write(attachment.Data);
         }
     }
 }

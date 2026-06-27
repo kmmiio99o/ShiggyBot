@@ -1,37 +1,28 @@
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to bulk delete messages in a channel.
-    /// </summary>
     internal sealed class PurgeCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal PurgeCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "purge";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Delete multiple messages from a channel";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -44,15 +35,15 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length == 0 || !int.TryParse(args[0], out int count) || count < 1 || count > 100)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Purge Command",
-                    Description = "Delete multiple messages from the channel",
-                    Color = new Color(0xFFA500)
-                };
-                _ = usageEmbed.AddField("Usage", "`purge <count>` (1-100)", inline: false);
-                _ = usageEmbed.AddField("Example", "`purge 50`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Purge Command")
+                        .WithDescription("Delete multiple messages from the channel")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`purge <count>` (1-100)", false)
+                        .AddField("Example", "`purge 50`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -61,22 +52,29 @@ namespace ShiggyBot.Commands.Moderation
 
             if (filtered.Count == 0)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("No deletable messages found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("No deletable messages found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
             await ((ITextChannel)message.Channel).DeleteMessagesAsync(filtered).ConfigureAwait(false);
-            EmbedBuilder embed = new()
-            {
-                Title = "🛡️ Messages Purged",
-                Color = new Color(0x00FF00)
-            };
-            _ = embed.AddField("Deleted", $"{filtered.Count} message(s)", inline: true);
-            _ = embed.AddField("Channel", message.Channel.Name, inline: true);
-            _ = embed.AddField("Moderator", message.Author.Username, inline: true);
-            embed.WithFooter("Purge action completed");
-            embed.WithCurrentTimestamp();
-            await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+
+            V1MessageBuilder builder = new V1MessageBuilder()
+                .AddEmbed(new V1EmbedBuilder()
+                    .WithTitle("🛡️ Messages Purged")
+                    .WithColor(0x00FF00)
+                    .AddField("Deleted", $"{filtered.Count} message(s)", true)
+                    .AddField("Channel", message.Channel.Name, true)
+                    .AddField("Moderator", message.Author.Username, true)
+                    .WithFooter("Purge action completed")
+                    .WithTimestamp(DateTimeOffset.UtcNow));
+
+            await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
         }
     }
 }

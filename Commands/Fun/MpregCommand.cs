@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Discord;
 using Discord.WebSocket;
-using ShiggyBot.Utils;
+using ShiggyBot.Components.V1;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Formats.Png;
@@ -13,6 +13,14 @@ namespace ShiggyBot.Commands.Fun
 {
     internal sealed class MpregCommand : ICommand
     {
+        private readonly ComponentsV1Client _v1Client;
+
+        internal MpregCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "mpreg";
 
         public string Description => "Generate a pregnant man image with a user's avatar on the head";
@@ -44,14 +52,26 @@ namespace ShiggyBot.Commands.Fun
 
             if (args.Length == 0)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Usage: `Smpreg <username | userid | @mention>`")).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Usage: `Smpreg <username | userid | @mention>`")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
             IUser? target = await ResolveUser(args[0], message, client).ConfigureAwait(false);
             if (target is null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Could not find that user.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Could not find that user.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -61,6 +81,8 @@ namespace ShiggyBot.Commands.Fun
             string cacheKey = $"{target.Id}:{avatarUrl}";
             string avatarHash = avatarUrl.Split('/').Last().Split('.').First().Split('?').First();
             string fileName = $"mpreg_{target.Id}_{avatarHash}.png";
+
+            byte[] imageBytes;
 
             if (!ResultCache.TryGetValue(cacheKey, out string? cachedPath))
             {
@@ -77,20 +99,22 @@ namespace ShiggyBot.Commands.Fun
 
             if (cachedPath is not null)
             {
-                Embed cachedEmbed = new EmbedBuilder()
-                    .WithImageUrl($"attachment://{fileName}")
-                    .WithAuthor(target)
-                    .WithFooter($"Requested by {message.Author.GlobalName ?? message.Author.Username}")
-                    .WithColor(new Color(0xE91E63))
-                    .Build();
+                imageBytes = await File.ReadAllBytesAsync(cachedPath).ConfigureAwait(false);
 
-                using FileStream cachedStream = File.OpenRead(cachedPath);
-                await message.Channel.SendFileAsync(cachedStream, fileName, embed: cachedEmbed).ConfigureAwait(false);
+                V1MessageBuilder builder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithImage($"attachment://{fileName}")
+                        .WithAuthor(target.GlobalName ?? target.Username, target.GetAvatarUrl() ?? target.GetDefaultAvatarUrl())
+                        .WithFooter($"Requested by {message.Author.GlobalName ?? message.Author.Username}")
+                        .WithColor(0xE91E63))
+                    .AddAttachment(imageBytes, fileName);
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
                 return;
             }
 
             byte[] avatarData = await _http.GetByteArrayAsync(new Uri(avatarUrl)).ConfigureAwait(false);
-            (Color embedColor, byte[] imageBytes) = GenerateMpregImage(avatarData);
+            (Color embedColor, imageBytes) = GenerateMpregImage(avatarData);
 
             Directory.CreateDirectory(CacheDir);
             string filePath = Path.Combine(CacheDir, fileName);
@@ -98,15 +122,15 @@ namespace ShiggyBot.Commands.Fun
 
             ResultCache[cacheKey] = filePath;
 
-            Embed embed = new EmbedBuilder()
-                .WithImageUrl($"attachment://{fileName}")
-                .WithAuthor(target)
-                .WithFooter($"Requested by {message.Author.GlobalName ?? message.Author.Username}")
-                .WithColor(embedColor)
-                .Build();
+            V1MessageBuilder builder2 = new V1MessageBuilder()
+                .AddEmbed(new V1EmbedBuilder()
+                    .WithImage($"attachment://{fileName}")
+                    .WithAuthor(target.GlobalName ?? target.Username, target.GetAvatarUrl() ?? target.GetDefaultAvatarUrl())
+                    .WithFooter($"Requested by {message.Author.GlobalName ?? message.Author.Username}")
+                    .WithColor((int)embedColor.RawValue))
+                .AddAttachment(imageBytes, fileName);
 
-            using MemoryStream ms = new(imageBytes);
-            await message.Channel.SendFileAsync(ms, fileName, embed: embed).ConfigureAwait(false);
+            await _v1Client.SendMessageAsync(message.Channel.Id, builder2).ConfigureAwait(false);
         }
 
         private static async Task<IUser?> ResolveUser(string input, SocketUserMessage message, DiscordSocketClient client)

@@ -1,37 +1,28 @@
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to remove a role from a user.
-    /// </summary>
     internal sealed class RemoveRoleCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal RemoveRoleCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "removerole";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Remove a role from a user";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -53,16 +44,16 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length < offset + 1)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Remove Role Command",
-                    Description = "Remove a role from a server member",
-                    Color = new Color(0xFFA500)
-                };
-                usageEmbed.AddField("Usage", "`removerole <user> <role>`", inline: false);
-                usageEmbed.AddField("Reply Usage", "Reply to a message with `removerole <role>`", inline: false);
-                usageEmbed.AddField("Example", "`removerole @user Member`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Remove Role Command")
+                        .WithDescription("Remove a role from a server member")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`removerole <user> <role>`", false)
+                        .AddField("Reply Usage", "Reply to a message with `removerole <role>`", false)
+                        .AddField("Example", "`removerole @user Member`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -73,7 +64,13 @@ namespace ShiggyBot.Commands.Moderation
 
             if (user is null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("User not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -82,28 +79,41 @@ namespace ShiggyBot.Commands.Moderation
 
             if (role == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Role not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Role not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
             try
             {
                 await user.RemoveRoleAsync(role).ConfigureAwait(false);
-                EmbedBuilder embed = new()
-                {
-                    Title = "🛡️ Role Removed",
-                    Color = new Color(0xFF0000)
-                };
-                embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                embed.AddField("Role", role.Name, inline: true);
-                embed.AddField("Moderator", message.Author.Username, inline: true);
-                embed.WithFooter("Role removal completed");
-                embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+
+                V1MessageBuilder builder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Role Removed")
+                        .WithColor(0xFF0000)
+                        .AddField("User", $"{user.Username}#{user.Discriminator}", true)
+                        .AddField("Role", role.Name, true)
+                        .AddField("Moderator", message.Author.Username, true)
+                        .WithFooter("Role removal completed")
+                        .WithTimestamp(DateTimeOffset.UtcNow));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to remove role. Check role hierarchy.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to remove role. Check role hierarchy.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
     }

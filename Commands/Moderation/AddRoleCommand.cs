@@ -1,37 +1,28 @@
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Moderation
 {
-    /// <summary>
-    /// Command to add a role to a user.
-    /// </summary>
     internal sealed class AddRoleCommand : ICommand
     {
-        /// <summary>
-        /// Gets the command name.
-        /// </summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal AddRoleCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "addrole";
-        /// <summary>
-        /// Gets the command description.
-        /// </summary>
+
         public string Description => "Add a role to a user";
-        /// <summary>
-        /// Gets the command category.
-        /// </summary>
+
         public string Category => "Moderation";
-        /// <summary>
-        /// Gets the command aliases.
-        /// </summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>
-        /// Executes the command.
-        /// </summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -53,16 +44,16 @@ namespace ShiggyBot.Commands.Moderation
 
             if (args.Length < offset + 1)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Add Role Command",
-                    Description = "Add a role to a server member",
-                    Color = new Color(0xFFA500)
-                };
-                usageEmbed.AddField("Usage", "`addrole <user> <role>`", inline: false);
-                usageEmbed.AddField("Reply Usage", "Reply to a message with `addrole <role>`", inline: false);
-                usageEmbed.AddField("Example", "`addrole @user Member`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Add Role Command")
+                        .WithDescription("Add a role to a server member")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`addrole <user> <role>`", false)
+                        .AddField("Reply Usage", "Reply to a message with `addrole <role>`", false)
+                        .AddField("Example", "`addrole @user Member`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -73,7 +64,13 @@ namespace ShiggyBot.Commands.Moderation
 
             if (user == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("User not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("User not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
@@ -82,32 +79,51 @@ namespace ShiggyBot.Commands.Moderation
 
             if (role == null)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Role not found.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Role not found.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
                 return;
             }
 
             try
             {
                 await user.AddRoleAsync(role).ConfigureAwait(false);
-                EmbedBuilder embed = new()
-                {
-                    Title = "🛡️ Role Added",
-                    Color = new Color(0x00FF00)
-                };
-                embed.AddField("User", $"{user.Username}#{user.Discriminator}", inline: true);
-                embed.AddField("Role", role.Name, inline: true);
-                embed.AddField("Moderator", message.Author.Username, inline: true);
-                embed.WithFooter("Role assignment completed");
-                embed.WithCurrentTimestamp();
-                await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+
+                V1MessageBuilder builder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Role Added")
+                        .WithColor(0x00FF00)
+                        .AddField("User", $"{user.Username}#{user.Discriminator}", true)
+                        .AddField("Role", role.Name, true)
+                        .AddField("Moderator", message.Author.Username, true)
+                        .WithFooter("Role assignment completed")
+                        .WithTimestamp(DateTimeOffset.UtcNow));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
             }
             catch (HttpRequestException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Failed to add role. Check role hierarchy.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Failed to add role. Check role hierarchy.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
             catch (TaskCanceledException)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Request timed out. Try again.")).ConfigureAwait(false);
+                V1MessageBuilder errorBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Request timed out. Try again.")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, errorBuilder).ConfigureAwait(false);
             }
         }
     }

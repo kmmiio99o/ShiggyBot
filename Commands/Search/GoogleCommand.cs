@@ -1,30 +1,26 @@
-using Discord;
 using Discord.WebSocket;
-using ShiggyBot.Utils;
+using ShiggyBot.Components.V1;
 
 namespace ShiggyBot.Commands.Search
 {
-    /// <summary>
-    /// Command to search Google directly from Discord.
-    /// </summary>
     internal sealed class GoogleCommand : ICommand
     {
-        /// <summary>Gets the command name.</summary>
+        private readonly ComponentsV1Client _v1Client;
+
+        internal GoogleCommand(ComponentsV1Client v1Client)
+        {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            _v1Client = v1Client;
+        }
+
         public string Name => "google";
 
-        /// <summary>Gets the command description.</summary>
         public string Description => "Search Google directly from Discord";
 
-        /// <summary>Gets the command category.</summary>
         public string Category => "Search";
 
-        /// <summary>Gets the command aliases.</summary>
         public IReadOnlyList<string> Aliases => ["g", "search"];
 
-        /// <summary>Executes the command.</summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -33,23 +29,28 @@ namespace ShiggyBot.Commands.Search
 
             if (args.Length == 0)
             {
-                await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildErrorEmbed("Usage: google <query>")).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("Error")
+                        .WithDescription("Usage: google <query>")
+                        .WithColor(0xFF0000));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
             string query = string.Join(" ", args);
             string url = $"https://www.google.com/search?q={Uri.EscapeDataString(query)}";
 
-            EmbedBuilder embed = new()
-            {
-                Title = "🔍 Google Search",
-                Description = $"**Query:** {query}",
-                Color = new Color(0x00FF00),
-                Url = url
-            };
-            embed.AddField("Link", url);
+            V1MessageBuilder builder = new V1MessageBuilder()
+                .AddEmbed(new V1EmbedBuilder()
+                    .WithTitle("🔍 Google Search")
+                    .WithDescription($"**Query:** {query}")
+                    .WithColor(0x00FF00)
+                    .WithUrl(url)
+                    .AddField("Link", url));
 
-            await message.Channel.SendMessageAsync(embed: embed.Build()).ConfigureAwait(false);
+            await _v1Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
         }
     }
 }

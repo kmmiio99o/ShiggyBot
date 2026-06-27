@@ -1,35 +1,32 @@
 using Discord;
 using Discord.WebSocket;
+using ShiggyBot.Components.V1;
 using ShiggyBot.Utils;
 using ShiggyBot.Data;
 
 namespace ShiggyBot.Commands.Core
 {
-    /// <summary>
-    /// Command to disable a server command.
-    /// </summary>
     internal sealed class DisableCommand : ICommand
     {
+        private readonly ComponentsV1Client _v1Client;
         private readonly DatabaseService _db;
 
-        internal DisableCommand(DatabaseService db)
+        internal DisableCommand(ComponentsV1Client v1Client, DatabaseService db)
         {
+            ArgumentNullException.ThrowIfNull(v1Client);
+            ArgumentNullException.ThrowIfNull(db);
+            _v1Client = v1Client;
             _db = db;
         }
 
-        /// <summary>Gets the command name.</summary>
         public string Name => "disable";
-        /// <summary>Gets the command description.</summary>
+
         public string Description => "Disable a command in this server";
-        /// <summary>Gets the command category.</summary>
+
         public string Category => "Moderation";
-        /// <summary>Gets the command aliases.</summary>
+
         public IReadOnlyList<string> Aliases => [];
 
-        /// <summary>Executes the command.</summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
@@ -47,21 +44,28 @@ namespace ShiggyBot.Commands.Core
 
             if (args.Length == 0)
             {
-                EmbedBuilder usageEmbed = new()
-                {
-                    Title = "🛡️ Disable Command",
-                    Description = "Disable a command in this server",
-                    Color = new Color(0xFFA500)
-                };
-                usageEmbed.AddField("Usage", "`disable <command>`", inline: false);
-                usageEmbed.AddField("Example", "`disable nuke`", inline: false);
-                await message.Channel.SendMessageAsync(embed: usageEmbed.Build()).ConfigureAwait(false);
+                V1MessageBuilder usageBuilder = new V1MessageBuilder()
+                    .AddEmbed(new V1EmbedBuilder()
+                        .WithTitle("🛡️ Disable Command")
+                        .WithDescription("Disable a command in this server")
+                        .WithColor(0xFFA500)
+                        .AddField("Usage", "`disable <command>`", false)
+                        .AddField("Example", "`disable nuke`", false));
+
+                await _v1Client.SendMessageAsync(message.Channel.Id, usageBuilder).ConfigureAwait(false);
                 return;
             }
 
             string commandName = args[0];
             await _db.DisableCommandAsync(guildChannel.Guild.Id, commandName).ConfigureAwait(false);
-            await message.Channel.SendMessageAsync(embed: EmbedHelper.BuildSuccessEmbed($"Command `{commandName}` has been disabled in this server.")).ConfigureAwait(false);
+
+            V1MessageBuilder successBuilder = new V1MessageBuilder()
+                .AddEmbed(new V1EmbedBuilder()
+                    .WithTitle("Success")
+                    .WithDescription($"Command `{commandName}` has been disabled in this server.")
+                    .WithColor(0x00FF00));
+
+            await _v1Client.SendMessageAsync(message.Channel.Id, successBuilder).ConfigureAwait(false);
         }
     }
 }
