@@ -1,8 +1,7 @@
-using Discord;
-using Discord.Rest;
+using System.Text;
 using Discord.WebSocket;
+using ShiggyBot.Components.V2;
 using ShiggyBot.Services;
-using ShiggyBot.Utils;
 
 namespace ShiggyBot.Commands.Search
 {
@@ -12,205 +11,186 @@ namespace ShiggyBot.Commands.Search
     internal sealed class PluginCommand : ICommand
     {
         private readonly PluginService _pluginService;
+        private readonly ComponentsV2Client _v2Client;
 
-        internal PluginCommand(PluginService pluginService)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PluginCommand"/> class.
+        /// </summary>
+        /// <param name="pluginService">The plugin search service.</param>
+        /// <param name="v2Client">The Components V2 client.</param>
+        internal PluginCommand(PluginService pluginService, ComponentsV2Client v2Client)
         {
+            ArgumentNullException.ThrowIfNull(pluginService);
+            ArgumentNullException.ThrowIfNull(v2Client);
             _pluginService = pluginService;
+            _v2Client = v2Client;
         }
 
         /// <summary>Gets the command name.</summary>
         public string Name => "plugin";
+
         /// <summary>Gets the command description.</summary>
         public string Description => "Search for Discord plugins and extensions";
+
         /// <summary>Gets the command category.</summary>
         public string Category => "Search";
+
         /// <summary>Gets the command aliases.</summary>
         public IReadOnlyList<string> Aliases => ["plugins", "plg", "plug"];
 
         /// <summary>Executes the command.</summary>
-        /// <param name="message">The message that triggered the command.</param>
-        /// <param name="args">The command arguments.</param>
-        /// <param name="client">The Discord client instance.</param>
         public async Task ExecuteAsync(SocketUserMessage message, string[] args, DiscordSocketClient client)
         {
             ArgumentNullException.ThrowIfNull(message);
             ArgumentNullException.ThrowIfNull(args);
+
+            if (args.Length == 0)
+            {
+                await SendErrorAsync(message, "Please provide a plugin name to search.", "Usage: `plugin <name>`").ConfigureAwait(false);
+                return;
+            }
+
+            string query = string.Join(" ", args);
+
+            PluginResult? result;
             try
             {
-                // Validate arguments
-                if (args.Length == 0)
-                {
-                    EmbedBuilder errEmbed = new()
-                    {
-                        Title = "Error",
-                        Description = "Please provide a plugin name to search.",
-                        Color = new Color(0xE74C3C)
-                    };
-                    errEmbed.AddField("Usage", "`plugin <name>`", inline: false);
-                    await message.Channel.SendMessageAsync(embed: errEmbed.Build()).ConfigureAwait(false);
-                    return;
-                }
-
-                // Search for plugin
-                string query = string.Join(" ", args);
-                EmbedBuilder searchEmbed = new()
-                {
-                    Title = "🔌 Plugin Search",
-                    Description = $"Searching for: **{query}**",
-                    Color = new Color(0x3498DB)
-                };
-                searchEmbed.AddField("Status", "⏳ Searching...", inline: false);
-                RestUserMessage statusMessage = await message.Channel.SendMessageAsync(embed: searchEmbed.Build()).ConfigureAwait(false);
-
-                try
-                {
-                    PluginResult? result = await _pluginService.SearchPluginAsync(query).ConfigureAwait(false);
-
-                    if (result != null)
-                    {
-                        await statusMessage.DeleteAsync().ConfigureAwait(false);
-                        // Register ephemeral install handler for this result
-                        EphemeralButtonService.Register($"plugin_install_{result.Name}", async (component) =>
-                        {
-                            if (string.IsNullOrWhiteSpace(result.InstallUrl))
-                            {
-                                await component.RespondAsync("Install link not available.", ephemeral: true).ConfigureAwait(false);
-                                return;
-                            }
-                            EmbedBuilder embed = new()
-                            {
-                                Title = $"📥 Install {result.Name}",
-                                Description = $"[Click here to install]({result.InstallUrl})",
-                                Color = new Color(0x27AE60),
-                                Url = result.InstallUrl,
-                                Footer = new EmbedFooterBuilder { Text = "This message is only visible to you" }
-                            };
-
-                            await component.RespondAsync(embed: embed.Build(), ephemeral: true).ConfigureAwait(false);
-                        });
-                        await HandleSuccessfulSearchAsync(message, result).ConfigureAwait(false);
-                    }
-                    else
-                    {
-                        await statusMessage.ModifyAsync(x => x.Embed = BuildNotFoundEmbed(query)).ConfigureAwait(false);
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    await statusMessage.ModifyAsync(x => x.Embed =
-                        EmbedHelper.BuildErrorEmbed($"Search failed: {ex.Message}")).ConfigureAwait(false);
-                }
-                catch (TaskCanceledException ex)
-                {
-                    await statusMessage.ModifyAsync(x => x.Embed =
-                        EmbedHelper.BuildErrorEmbed($"Search timed out: {ex.Message}")).ConfigureAwait(false);
-                }
+                result = await _pluginService.SearchPluginAsync(query).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
-                await message.Channel.SendMessageAsync(
-                    embed: EmbedHelper.BuildErrorEmbed($"An error occurred: {ex.Message}")).ConfigureAwait(false);
+                await SendErrorAsync(message, "Search failed: " + ex.Message).ConfigureAwait(false);
+                return;
             }
             catch (TaskCanceledException ex)
             {
-                await message.Channel.SendMessageAsync(
-                    embed: EmbedHelper.BuildErrorEmbed($"Request timed out: {ex.Message}")).ConfigureAwait(false);
+                await SendErrorAsync(message, "Search timed out: " + ex.Message).ConfigureAwait(false);
+                return;
             }
+
+            if (result is null)
+            {
+                await SendNotFoundAsync(message, query).ConfigureAwait(false);
+                return;
+            }
+
+            await SendSuccessAsync(message, result).ConfigureAwait(false);
         }
 
-        private static async Task HandleSuccessfulSearchAsync(SocketUserMessage message, PluginResult result)
+        private async Task SendErrorAsync(SocketUserMessage message, string error, string? usage = null)
         {
-            Color statusColor = GetStatusColor(result.Status);
+            V2MessageBuilder builder = new V2MessageBuilder()
+                .AddComponent(new ContainerBuilder()
+                    .WithAccentColor(0xE74C3C)
+                    .AddComponent(new TextDisplayBuilder().WithContent("# Error\n\n" + error)));
+
+            if (usage is not null)
+            {
+                builder.AddComponent(new SeparatorBuilder().WithSpacing(SeparatorSpacing.Small));
+                builder.AddComponent(new TextDisplayBuilder().WithContent("## Usage\n\n" + usage));
+            }
+
+            await _v2Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
+        }
+
+        private async Task SendSuccessAsync(SocketUserMessage message, PluginResult result)
+        {
             string statusEmoji = GetStatusEmoji(result.Status);
+            int statusColor = GetStatusColorInt(result.Status);
+            bool hasSource = !string.IsNullOrWhiteSpace(result.SourceUrl);
+            bool hasInstall = !string.IsNullOrWhiteSpace(result.InstallUrl);
 
-            EmbedBuilder embed = new EmbedBuilder()
-                .WithTitle($"🔌 {result.Name}")
-                .WithDescription(result.Description)
-                .WithColor(statusColor);
+            if (hasInstall)
+            {
+                string capturedUrl = result.InstallUrl;
+                string capturedName = result.Name;
+                EphemeralButtonService.Register($"plugin_install_{result.Name}", async (component) =>
+                {
+                    await component.RespondAsync(
+                        text: "\U0001f4e5 **" + capturedName + "** install link:\n" + capturedUrl,
+                        ephemeral: true).ConfigureAwait(false);
+                });
+            }
 
-            // Add prominent status field with color-coded emoji
-            embed.AddField("Status", $"{statusEmoji} **{result.Status}**", inline: true);
+            ContainerBuilder container = new ContainerBuilder()
+                .WithAccentColor(statusColor);
 
-            // Add authors if available
+            StringBuilder content = new();
+            content.Append("# \U0001f50c ");
+            content.Append(result.Name);
+            content.Append("\n\n");
+            content.Append(result.Description);
+            content.Append("\n\n## Status\n");
+            content.Append(statusEmoji);
+            content.Append(" **");
+            content.Append(result.Status);
+            content.Append("**");
+
             if (result.Authors.Count > 0)
             {
-                embed.AddField("Authors", string.Join(", ", result.Authors), inline: true);
+                content.Append("\n\n\U0001f464 **Authors:** ");
+                content.Append(string.Join(", ", result.Authors));
             }
 
-            // Add warning message if present
             if (!string.IsNullOrWhiteSpace(result.WarningMessage))
             {
-                embed.AddField("⚠️ Warning", result.WarningMessage, inline: false);
+                content.Append("\n\n\u26a0\ufe0f **Warning:** ");
+                content.Append(result.WarningMessage);
             }
 
-            // Build buttons
-            ComponentBuilder componentBuilder = new();
+            container.AddComponent(new TextDisplayBuilder().WithContent(content.ToString()));
 
-            // Add Install button with status-appropriate styling
-            if (!string.IsNullOrWhiteSpace(result.InstallUrl))
+            if (hasSource)
             {
-                ButtonStyle installButtonStyle = result.Status?.ToUpperInvariant() switch
-                {
-                    "BROKEN" => ButtonStyle.Secondary,
-                    "WARNING" => ButtonStyle.Primary,
-                    _ => ButtonStyle.Success
-                };
-                componentBuilder.WithButton("📥 Install", customId: $"plugin_install_{result.Name}", style: installButtonStyle);
+                container.AddComponent(new SeparatorBuilder().WithSpacing(SeparatorSpacing.Small));
+                container.AddComponent(new SectionBuilder()
+                    .AddTextDisplay(new TextDisplayBuilder().WithContent("Source code available on GitHub"))
+                    .WithLinkButtonAccessory("\U0001f4c2 Source", new Uri(result.SourceUrl)));
             }
 
-            // Add Source button as a link to the repository
-            if (!string.IsNullOrWhiteSpace(result.SourceUrl))
+            if (hasInstall)
             {
-                // Use a URL button that opens the repository directly
-                componentBuilder.WithButton("📂 Source", url: result.SourceUrl, style: ButtonStyle.Link);
+                container.AddComponent(new SeparatorBuilder().WithSpacing(SeparatorSpacing.Small));
+                container.AddComponent(new SectionBuilder()
+                    .AddTextDisplay(new TextDisplayBuilder().WithContent("Click to get the install link"))
+                    .WithButtonAccessory("\U0001f4e5 Install", "plugin_install_" + result.Name));
             }
 
-            // Send the main plugin info embed with buttons
-            await message.Channel.SendMessageAsync(embed: embed.Build(), components: componentBuilder.Build()).ConfigureAwait(false);
+            V2MessageBuilder builder = new();
+            builder.AddComponent(container);
+            await _v2Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
         }
 
-        private static Embed BuildNotFoundEmbed(string query)
+        private async Task SendNotFoundAsync(SocketUserMessage message, string query)
         {
-            EmbedBuilder embed = new()
-            {
-                Title = "🔌 Plugin Not Found",
-                Description = $"Could not find a plugin matching **{query}**",
-                Color = new Color(0xE74C3C)
-            };
+            V2MessageBuilder builder = new V2MessageBuilder()
+                .AddComponent(new SectionBuilder()
+                    .AddTextDisplay(new TextDisplayBuilder().WithContent(
+                        "# \U0001f50c Plugin Not Found\n\nCould not find a plugin matching **" + query + "**\n\n\U0001f4a1 **Suggestions**\n\u2022 Try a different search term\n\u2022 Check the spelling\n\u2022 Visit the Plugins List for more options"))
+                    .WithLinkButtonAccessory("Plugins List", new Uri("https://plugins-list.pages.dev/")));
 
-            embed.AddField("💡 Suggestions",
-                "• Try a different search term\n" +
-                "• Check the spelling\n" +
-                "• Visit the [Plugins List](https://github.com/Purple-EyeZ/Plugins-List) for more options",
-                inline: false);
-
-            embed.Footer = new EmbedFooterBuilder
-            {
-                Text = "Plugin database is updated regularly"
-            };
-
-            return embed.Build();
+            await _v2Client.SendMessageAsync(message.Channel.Id, builder).ConfigureAwait(false);
         }
 
         private static string GetStatusEmoji(string status)
         {
             return status?.ToUpperInvariant() switch
             {
-                "WORKING" => "✅",
-                "WARNING" => "⚠️",
-                "BROKEN" => "❌",
-                _ => "❓"
+                "WORKING" => "\u2705",
+                "WARNING" => "\u26a0\ufe0f",
+                "BROKEN" => "\u274c",
+                _ => "\u2753"
             };
         }
 
-        private static Color GetStatusColor(string status)
+        private static int GetStatusColorInt(string status)
         {
             return status?.ToUpperInvariant() switch
             {
-                "WORKING" => new Color(0x27AE60),      // Green
-                "WARNING" => new Color(0xF39C12),      // Orange
-                "BROKEN" => new Color(0xE74C3C),       // Red
-                _ => new Color(0x3498DB)                // Blue
+                "WORKING" => 0x27AE60,
+                "WARNING" => 0xF39C12,
+                "BROKEN" => 0xE74C3C,
+                _ => 0x3498DB
             };
         }
     }

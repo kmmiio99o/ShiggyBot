@@ -45,7 +45,11 @@ namespace ShiggyBot.Services
         {
             // Utility Commands
             Register(new PingCommand());
-            Register(new HelpCommand(this));
+            if (_v2Client is not null)
+            {
+                Register(new HelpCommand(this, _v2Client));
+            }
+
             Register(new NoteCommand());
 
             // Moderation Commands
@@ -61,7 +65,11 @@ namespace ShiggyBot.Services
             Register(new SetWelcomeCommand(_db));
 
             // Search Commands
-            Register(new PluginCommand(_pluginService));
+            if (_v2Client is not null)
+            {
+                Register(new PluginCommand(_pluginService, _v2Client));
+            }
+
             Register(new GoogleCommand());
 
             // Fun Commands
