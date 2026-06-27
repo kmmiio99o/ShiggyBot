@@ -15,7 +15,7 @@ namespace ShiggyBot.Configuration
         /// <summary>
         /// Gets or sets the command prefix.
         /// </summary>
-        public string Prefix { get; set; } = "S";
+        public string Prefix { get; set; } = string.Empty;
 
         /// <summary>
         /// Loads bot configuration from IConfiguration.
@@ -41,11 +41,8 @@ namespace ShiggyBot.Configuration
             }
             if (string.IsNullOrWhiteSpace(prefix))
             {
-                prefix = "S";
+                prefix = string.Empty;
             }
-
-            Utils.Logger.Info($"Token loaded: {(!string.IsNullOrEmpty(token) ? "YES" : "NO")}");
-            Utils.Logger.Info($"Prefix loaded: {prefix}");
 
             return new BotConfig { Token = token, Prefix = prefix };
         }
