@@ -53,7 +53,6 @@ namespace ShiggyBot.Services
                 // Moderation Commands
                 Register(new KickCommand(_v1Client));
                 Register(new BanCommand(_v1Client, _db));
-                Register(new TimeoutCommand(_v1Client));
                 Register(new PurgeCommand(_v1Client));
                 Register(new AddRoleCommand(_v1Client));
                 Register(new RemoveRoleCommand(_v1Client));
@@ -77,6 +76,7 @@ namespace ShiggyBot.Services
             {
                 Register(new HelpCommand(this, _v2Client));
                 Register(new PluginCommand(_pluginService, _v2Client));
+                Register(new TimeoutCommand(_v2Client));
                 Register(new V2TestCommand(_v2Client));
             }
         }
