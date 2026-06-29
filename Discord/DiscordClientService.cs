@@ -247,14 +247,14 @@ namespace ShiggyBot.Discord
                     {
                         await component.DeferAsync().ConfigureAwait(false);
 
-                        byte[] payload = HelpCommand.BuildCategoryHelpPayload(selectedCategory, commands, prefix, categories);
-                        await _v2Client.EditRawPayloadAsync(component.ChannelId!.Value, component.Message.Id, payload).ConfigureAwait(false);
+                        V2MessageBuilder builder = HelpCommand.BuildCategoryHelpPayload(selectedCategory, commands, prefix, categories);
+                        await _v2Client.EditMessageAsync(component.ChannelId!.Value, component.Message.Id, builder).ConfigureAwait(false);
                     }
                     else
                     {
                         Embed embed = EmbedHelper.BuildCategoryHelpEmbed(selectedCategory, commands, prefix);
 
-                        SelectMenuBuilder menu = new()
+                        global::Discord.SelectMenuBuilder menu = new()
                         {
                             CustomId = "help_category_select",
                             Placeholder = "Select a category...",
